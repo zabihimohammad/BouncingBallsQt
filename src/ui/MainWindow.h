@@ -1,0 +1,37 @@
+#pragma once
+#include <QMainWindow>
+#include <QStackedWidget>
+#include "../core/ScoreManager.h"
+#include "../gameplay/GameScene.h"
+#include "../gameplay/GameView.h"
+#include "MainMenuWidget.h"
+#include "StartGameWidget.h"
+#include "SettingsWidget.h"
+#include "ScoreboardWidget.h"
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+public:
+    MainWindow(QWidget* parent = nullptr);
+
+private slots:
+    void startNewGame(const QString& username, const QString& mode);
+    void handleGameOver(int score);
+    void handleGameWon(int score);
+    void showPauseMenu();
+    void returnToMainMenu();
+
+private:
+    QStackedWidget* m_stackedWidget;
+    MainMenuWidget* m_mainMenu;
+    StartGameWidget* m_startMenu;
+    SettingsWidget* m_settingsWidget;
+    ScoreboardWidget* m_scoreboardWidget;
+
+    GameView* m_gameView = nullptr;
+    GameScene* m_gameScene = nullptr;
+    ScoreManager m_scoreManager;
+
+    QString m_currentUser;
+    QString m_currentMode;
+};
