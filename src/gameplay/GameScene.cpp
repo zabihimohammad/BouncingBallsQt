@@ -1,5 +1,6 @@
 #include "GameScene.h"
 #include "../core/SoundManager.h"
+#include <QRandomGenerator>
 #include <QGraphicsSceneMouseEvent>
 #include <QKeyEvent>
 #include <cmath>

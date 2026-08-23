@@ -27,7 +27,7 @@ set(SOURCES
     src/ui/SettingsWidget.cpp
     src/ui/ScoreboardWidget.cpp
     src/ui/PauseDialog.cpp
-    src/ui/GameOverDialog.cpp
+    src/ui/GameOverDialog.cpp src/ui/waterbackgroundwidget.cpp src/ui/poolballswidget.cpp
 )
 
 set(HEADERS
@@ -46,6 +46,8 @@ set(HEADERS
     src/ui/ScoreboardWidget.h
     src/ui/PauseDialog.h
     src/ui/GameOverDialog.h
+    src/ui/waterbackgroundwidget.h
+    src/ui/poolballswidget.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
@@ -55,4 +57,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt${QT_VERSION_MAJOR}::Gui
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Multimedia
+)
+# ماژول OpenGLWidgets را اضافه کنید
+find_package(Qt6 COMPONENTS Core Gui Widgets Multimedia Network OpenGLWidgets REQUIRED)
+
+# در بخش target_link_libraries آن را لینک کنید
+target_link_libraries(BouncingBalls PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Multimedia
+        Qt6::Network
+        Qt6::OpenGLWidgets
 )

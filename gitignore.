@@ -1,0 +1,16 @@
+
+# فایل‌های بیلد و کامپایل
+cmake-build-*/
+build/
+*.user
+CMakeLists.txt.user
+
+# تنظیمات محیط توسعه JetBrains Rider
+.idea/
+.vs/
+
+# فایل‌های اجرایی کامپایل‌شده
+*.o
+*.a
+*.so
+bin/

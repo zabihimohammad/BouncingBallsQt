@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <QStackedWidget>
+#include <QKeyEvent>
 #include "../core/ScoreManager.h"
 #include "../gameplay/GameScene.h"
 #include "../gameplay/GameView.h"
@@ -12,7 +13,10 @@
 class MainWindow : public QMainWindow {
     Q_OBJECT
 public:
-    MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
     void startNewGame(const QString& username, const QString& mode);

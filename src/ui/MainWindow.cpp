@@ -2,10 +2,14 @@
 #include "PauseDialog.h"
 #include "GameOverDialog.h"
 #include <QStatusBar>
+#include <QKeyEvent>
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
-    setFixedSize(380, 660);
+    
+    // استفاده از حداقل اندازه به جای اندازه ثابت برای سازگاری با ریسایز و فول‌اسکرین
+    setMinimumSize(420, 680);
+    resize(420, 680);
     setStyleSheet("background-color: #1e272e;");
 
     m_stackedWidget = new QStackedWidget(this);
@@ -80,5 +84,17 @@ void MainWindow::returnToMainMenu() {
         delete m_gameView;
         m_gameView = nullptr;
         m_gameScene = nullptr;
+    }
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_F11) {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+    } else {
+        QMainWindow::keyPressEvent(event);
     }
 }
