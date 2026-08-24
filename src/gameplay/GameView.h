@@ -1,8 +1,13 @@
 #pragma once
+
 #include <QGraphicsView>
+#include <QResizeEvent>
 
 class GameView : public QGraphicsView {
-    Q_OBJECT
+Q_OBJECT
 public:
-    GameView(QWidget* parent = nullptr);
+    explicit GameView(QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 };
