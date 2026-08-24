@@ -1,0 +1,4273 @@
+
+
+================================================================================
+📄 FILE: ./CMakeLists.txt
+================================================================================
+cmake_minimum_required(VERSION 3.16)
+project(BouncingBalls LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+
+set(SOURCES
+    src/main.cpp
+    src/core/Ball.cpp
+    src/core/GridManager.cpp
+    src/core/ScoreManager.cpp
+    src/core/SoundManager.cpp
+    src/gameplay/GameScene.cpp
+    src/gameplay/GameView.cpp
+    src/gameplay/CannonItem.cpp
+    src/gameplay/AimLineItem.cpp
+    src/ui/MainWindow.cpp
+    src/ui/MainMenuWidget.cpp
+    src/ui/StartGameWidget.cpp
+    src/ui/SettingsWidget.cpp
+    src/ui/ScoreboardWidget.cpp
+    src/ui/PauseDialog.cpp
+    src/ui/GameOverDialog.cpp 
+    src/ui/waterbackgroundwidget.cpp 
+    src/ui/poolballswidget.cpp
+    src/ui/AdvancedSettingsWidget.cpp    
+)
+
+set(HEADERS
+    src/core/Ball.h
+    src/core/GridManager.h
+    src/core/ScoreManager.h
+    src/core/SoundManager.h
+    src/gameplay/GameScene.h
+    src/gameplay/GameView.h
+    src/gameplay/CannonItem.h
+    src/gameplay/AimLineItem.h
+    src/ui/MainWindow.h
+    src/ui/MainMenuWidget.h
+    src/ui/StartGameWidget.h
+    src/ui/SettingsWidget.h
+    src/ui/ScoreboardWidget.h
+    src/ui/PauseDialog.h
+    src/ui/GameOverDialog.h
+    src/ui/waterbackgroundwidget.h
+    src/ui/poolballswidget.h 
+    src/ui/AdvancedSettingsWidget.h    
+)
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Gui
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Multimedia
+)
+# ماژول OpenGLWidgets را اضافه کنید
+find_package(Qt6 COMPONENTS Core Gui Widgets Multimedia Network OpenGLWidgets REQUIRED)
+
+# در بخش target_link_libraries آن را لینک کنید
+target_link_libraries(BouncingBalls PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Multimedia
+        Qt6::Network
+        Qt6::OpenGLWidgets
+)
+
+================================================================================
+📄 FILE: ./src/gameplay/CannonItem.h
+================================================================================
+#pragma once
+#include <QGraphicsItem>
+#include <QPainter>
+#include "../core/Ball.h"
+
+class CannonItem : public QGraphicsItem {
+public:
+    CannonItem(qreal width, qreal height);
+
+    QRectF boundingRect() const override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+
+    void setAngle(qreal angleDeg);
+    qreal getAngle() const { return m_angle; }
+
+    void setCurrentBall(BallColor c);
+    BallColor getCurrentBall() const { return m_currentBall; }
+    void setNextBall(BallColor c);
+    BallColor getNextBall() const { return m_nextBall; }
+    void swapBalls();
+
+private:
+    qreal m_width;
+    qreal m_height;
+    qreal m_angle = 90.0;
+    BallColor m_currentBall = BallColor::RED;
+    BallColor m_nextBall = BallColor::BLUE;
+};
+
+
+================================================================================
+📄 FILE: ./src/gameplay/GameView.h
+================================================================================
+#pragma once
+#include <QGraphicsView>
+
+class GameView : public QGraphicsView {
+    Q_OBJECT
+public:
+    GameView(QWidget* parent = nullptr);
+};
+
+
+================================================================================
+📄 FILE: ./src/gameplay/CannonItem.cpp
+================================================================================
+#include "CannonItem.h"
+#include <QRadialGradient>
+
+CannonItem::CannonItem(qreal width, qreal height) : m_width(width), m_height(height) {}
+
+QRectF CannonItem::boundingRect() const {
+    return QRectF(-60, -60, 120, 120);
+}
+
+void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+    Q_UNUSED(option);
+    Q_UNUSED(widget);
+    painter->setRenderHint(QPainter::Antialiasing);
+
+    // Glowing Base
+    QRadialGradient baseGlow(0, 0, 45);
+    baseGlow.setColorAt(0.0, QColor(30, 41, 59));
+    baseGlow.setColorAt(0.8, QColor(15, 23, 42));
+    baseGlow.setColorAt(1.0, QColor(56, 189, 248, 200));
+
+    painter->setBrush(baseGlow);
+    painter->setPen(QPen(QColor(56, 189, 248), 2));
+    painter->drawEllipse(-40, -40, 80, 80);
+
+    // Modern Cannon Barrel
+    painter->save();
+    painter->rotate(-m_angle + 90);
+    painter->setBrush(QBrush(QColor(51, 65, 85)));
+    painter->setPen(QPen(QColor(148, 163, 184), 1.5));
+    painter->drawRoundedRect(-14, -50, 28, 50, 8, 8);
+    painter->restore();
+
+    // 3D Spherical Loaded Ball
+    QRadialGradient ballGrad(-5, -5, 20);
+    QColor ballCol = Ball::toQColor(m_currentBall);
+    ballGrad.setColorAt(0.0, QColor(255, 255, 255, 220));
+    ballGrad.setColorAt(0.4, ballCol);
+    ballGrad.setColorAt(1.0, ballCol.darker(180));
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(ballGrad);
+    painter->drawEllipse(-18, -18, 36, 36);
+
+    // Next Ball Preview Ring
+    painter->setPen(QPen(QColor(148, 163, 184, 150), 1, Qt::DashLine));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawEllipse(-85, -15, 28, 28);
+
+    QRadialGradient nextGrad(-71, -1, 14);
+    QColor nextCol = Ball::toQColor(m_nextBall);
+    nextGrad.setColorAt(0.0, QColor(255, 255, 255, 200));
+    nextGrad.setColorAt(0.4, nextCol);
+    nextGrad.setColorAt(1.0, nextCol.darker(180));
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(nextGrad);
+    painter->drawEllipse(-83, -13, 24, 24);
+}
+
+void CannonItem::setAngle(qreal angleDeg) { m_angle = angleDeg; update(); }
+void CannonItem::setCurrentBall(BallColor c) { m_currentBall = c; update(); }
+void CannonItem::setNextBall(BallColor c) { m_nextBall = c; update(); }
+void CannonItem::swapBalls() { std::swap(m_currentBall, m_nextBall); update(); }
+
+================================================================================
+📄 FILE: ./src/gameplay/AimLineItem.cpp
+================================================================================
+#include "AimLineItem.h"
+#include <cmath>
+
+AimLineItem::AimLineItem(qreal sceneWidth, qreal sceneHeight)
+    : m_sceneWidth(sceneWidth), m_sceneHeight(sceneHeight) {}
+
+QRectF AimLineItem::boundingRect() const {
+    return QRectF(0, 0, m_sceneWidth, m_sceneHeight);
+}
+
+void AimLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
+    Q_UNUSED(option);
+    Q_UNUSED(widget);
+    if (m_points.size() < 2) return;
+
+    painter->setRenderHint(QPainter::Antialiasing);
+    QPen pen(QColor(255, 255, 255, 180), 3, Qt::DashLine);
+    painter->setPen(pen);
+
+    for (int i = 0; i < m_points.size() - 1; ++i) {
+        painter->drawLine(m_points[i], m_points[i + 1]);
+    }
+}
+
+void AimLineItem::updateAim(const QPointF& startPos, qreal angleDeg) {
+    m_points.clear();
+    m_points.append(startPos);
+
+    qreal rad = angleDeg * M_PI / 180.0;
+    qreal dx = std::cos(rad);
+    qreal dy = -std::sin(rad);
+
+    QPointF current = startPos;
+    for (int bounce = 0; bounce < 2; ++bounce) {
+        // Raycast to walls
+        qreal targetX = (dx > 0) ? (m_sceneWidth - 22) : 22;
+        qreal tX = (dx != 0) ? (targetX - current.x()) / dx : 1e9;
+        qreal tY = (dy < 0) ? (22 - current.y()) / dy : 1e9;
+
+        if (tX < tY && tX > 0) {
+            current += QPointF(dx * tX, dy * tX);
+            m_points.append(current);
+            dx = -dx; // Wall reflection
+        } else if (tY > 0) {
+            current += QPointF(dx * tY, dy * tY);
+            m_points.append(current);
+            break;
+        }
+    }
+    update();
+}
+
+
+================================================================================
+📄 FILE: ./src/gameplay/AimLineItem.h
+================================================================================
+#pragma once
+#include <QGraphicsItem>
+#include <QPainter>
+#include <QVector>
+#include <QPointF>
+
+class AimLineItem : public QGraphicsItem {
+public:
+    AimLineItem(qreal sceneWidth, qreal sceneHeight);
+
+    QRectF boundingRect() const override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+
+    void updateAim(const QPointF& startPos, qreal angleDeg);
+
+private:
+    qreal m_sceneWidth;
+    qreal m_sceneHeight;
+    QVector<QPointF> m_points;
+};
+
+
+================================================================================
+📄 FILE: ./src/gameplay/GameView.cpp
+================================================================================
+#include "GameView.h"
+
+GameView::GameView(QWidget* parent) : QGraphicsView(parent) {
+    setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    setRenderHint(QPainter::Antialiasing);
+    setFixedSize(356, 604);
+}
+
+
+================================================================================
+📄 FILE: ./src/gameplay/GameScene.cpp
+================================================================================
+#include "GameScene.h"
+#include "../core/SoundManager.h"
+#include <QRandomGenerator>
+#include <QGraphicsSceneMouseEvent>
+#include <QKeyEvent>
+#include <cmath>
+
+GameScene::GameScene(const QString& username, const QString& mode, QObject* parent)
+    : QGraphicsScene(0, 0, 352, 600, parent), m_username(username), m_mode(mode) {
+    setBackgroundBrush(QBrush(QColor(30, 39, 46)));
+
+    if (m_mode == "Random" || m_mode == "Endless") {
+        m_grid.generateRandomLevel();
+    } else {
+        m_grid.loadLevel(1);
+    }
+
+    m_aimLine = new AimLineItem(352, 600);
+    addItem(m_aimLine);
+
+    m_cannon = new CannonItem(352, 600);
+    m_cannon->setPos(176, 550);
+    addItem(m_cannon);
+
+    m_gameLoopTimer = new QTimer(this);
+    connect(m_gameLoopTimer, &QTimer::timeout, this, &GameScene::updateGameLoop);
+    m_gameLoopTimer->start(16);
+
+    if (m_mode == "Time") {
+        m_countdownTimer = new QTimer(this);
+        connect(m_countdownTimer, &QTimer::timeout, this, &GameScene::onCountdownTimer);
+        m_countdownTimer->start(1000);
+    }
+
+    if (m_mode == "Endless") {
+        m_rowPushTimer = new QTimer(this);
+        connect(m_rowPushTimer, &QTimer::timeout, this, &GameScene::onRowTimer);
+        m_rowPushTimer->start(15000);
+    }
+
+    redrawGrid();
+}
+
+void GameScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
+    if (m_isPaused) return;
+    QPointF mousePos = event->scenePos();
+    QPointF cannonPos = m_cannon->pos();
+    qreal angle = std::atan2(cannonPos.y() - mousePos.y(), mousePos.x() - cannonPos.x()) * 180.0 / M_PI;
+    if (angle < 15) angle = 15;
+    if (angle > 165) angle = 165;
+
+    m_cannon->setAngle(angle);
+    m_aimLine->updateAim(cannonPos, angle);
+    QGraphicsScene::mouseMoveEvent(event);
+}
+
+void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    if (m_isPaused || m_isFlying) return;
+    if (event->button() == Qt::LeftButton) {
+        fireBall();
+    }
+    QGraphicsScene::mousePressEvent(event);
+}
+
+void GameScene::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Escape) {
+        emit pauseRequested();
+    } else if (event->key() == Qt::Key_Space) {
+        if (!m_isFlying) {
+            m_cannon->swapBalls();
+        }
+    }
+    QGraphicsScene::keyPressEvent(event);
+}
+
+void GameScene::fireBall() {
+    m_isFlying = true;
+    m_flyingColor = m_cannon->getCurrentBall();
+    m_flyingPos = m_cannon->pos();
+
+    qreal rad = m_cannon->getAngle() * M_PI / 180.0;
+    qreal speed = 14.0;
+    m_flyingVel = QPointF(std::cos(rad) * speed, -std::sin(rad) * speed);
+
+    auto remaining = m_grid.getRemainingColors();
+    BallColor nextCol = remaining.empty() ? Ball::getRandomColor(5) : remaining[QRandomGenerator::global()->bounded((int)remaining.size())];
+    m_cannon->setCurrentBall(m_cannon->getNextBall());
+    m_cannon->setNextBall(nextCol);
+    m_shotsFired++;
+
+    SoundManager::instance().playShoot();
+}
+
+void GameScene::updateGameLoop() {
+    if (m_isPaused) return;
+
+    if (m_isFlying) {
+        m_flyingPos += m_flyingVel;
+        // Wall Bounce
+        if (m_flyingPos.x() <= 22 || m_flyingPos.x() >= 352 - 22) {
+            m_flyingVel.setX(-m_flyingVel.x());
+        }
+
+        // Top hit or ball collision check
+        bool collided = false;
+        if (m_flyingPos.y() <= 22) {
+            collided = true;
+        } else {
+            for (int r = 0; r < GridManager::ROWS; ++r) {
+                int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+                for (int c = 0; c < cols; ++c) {
+                    if (m_grid.isOccupied(r, c)) {
+                        QPointF center = m_grid.getCenterPos(r, c);
+                        qreal dist = std::hypot(center.x() - m_flyingPos.x(), center.y() - m_flyingPos.y());
+                        if (dist < GridManager::BALL_DIAMETER * 0.9) {
+                            collided = true;
+                            break;
+                        }
+                    }
+                }
+                if (collided) break;
+            }
+        }
+
+        if (collided) {
+            m_isFlying = false;
+            snapBallToGrid(m_flyingPos, m_flyingColor);
+        }
+    }
+    update();
+}
+
+void GameScene::snapBallToGrid(const QPointF& pos, BallColor color) {
+    int r, c;
+    m_grid.getGridCoords(pos, r, c);
+    m_grid.setBall(r, c, new Ball(color, r, c));
+    popMatches(r, c, color);
+    checkFloatingBalls();
+    redrawGrid();
+
+    if (m_grid.isBottomReached()) {
+        SoundManager::instance().playGameOver();
+        emit gameOver(m_score);
+    } else if (m_grid.isCleared()) {
+        SoundManager::instance().playWin();
+        emit gameWon(m_score);
+    }
+}
+
+void GameScene::popMatches(int r, int c, BallColor color) {
+    auto matches = m_grid.findMatches(r, c, color);
+    if (!matches.empty()) {
+        SoundManager::instance().playPop();
+        for (auto p : matches) {
+            m_grid.removeBall(p.first, p.second);
+            m_score += 20;
+        }
+        emit scoreChanged(m_score);
+    }
+}
+
+void GameScene::checkFloatingBalls() {
+    auto floating = m_grid.findFloatingBalls();
+    for (auto p : floating) {
+        m_grid.removeBall(p.first, p.second);
+        m_score += 40;
+    }
+    if (!floating.empty()) {
+        emit scoreChanged(m_score);
+    }
+}
+
+void GameScene::redrawGrid() {
+    // Clear old ball items except cannon and aim
+    for (auto item : items()) {
+        if (item != m_cannon && item != m_aimLine) {
+            removeItem(item);
+            delete item;
+        }
+    }
+
+    for (int r = 0; r < GridManager::ROWS; ++r) {
+        int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid.isOccupied(r, c)) {
+                QPointF center = m_grid.getCenterPos(r, c);
+                auto ellipse = addEllipse(center.x() - 20, center.y() - 20, 40, 40,
+                    Qt::NoPen, QBrush(Ball::toQColor(m_grid.getBall(r, c)->getColor())));
+                ellipse->setZValue(1);
+            }
+        }
+    }
+}
+
+void GameScene::onRowTimer() {
+    m_grid.addRowFromTop();
+    redrawGrid();
+    if (m_grid.isBottomReached()) {
+        emit gameOver(m_score);
+    }
+}
+
+void GameScene::onCountdownTimer() {
+    m_timeLeft--;
+    emit timeChanged(m_timeLeft);
+    if (m_timeLeft <= 0) {
+        m_countdownTimer->stop();
+        emit gameOver(m_score);
+    }
+}
+
+void GameScene::pauseGame() { m_isPaused = true; }
+void GameScene::resumeGame() { m_isPaused = false; }
+
+
+================================================================================
+📄 FILE: ./src/gameplay/GameScene.h
+================================================================================
+#pragma once
+#include <QGraphicsScene>
+#include <QTimer>
+#include "../core/GridManager.h"
+#include "CannonItem.h"
+#include "AimLineItem.h"
+
+class GameScene : public QGraphicsScene {
+    Q_OBJECT
+public:
+    GameScene(const QString& username, const QString& mode, QObject* parent = nullptr);
+
+    void pauseGame();
+    void resumeGame();
+    int getScore() const { return m_score; }
+    int getTimeLeft() const { return m_timeLeft; }
+
+signals:
+    void gameWon(int score);
+    void gameOver(int score);
+    void scoreChanged(int score);
+    void timeChanged(int timeLeft);
+    void pauseRequested();
+
+protected:
+    void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
+    void mousePressEvent(QGraphicsSceneMouseEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
+
+private slots:
+    void updateGameLoop();
+    void onRowTimer();
+    void onCountdownTimer();
+
+private:
+    void fireBall();
+    void snapBallToGrid(const QPointF& pos, BallColor color);
+    void popMatches(int r, int c, BallColor color);
+    void checkFloatingBalls();
+    void redrawGrid();
+
+    QString m_username;
+    QString m_mode;
+    GridManager m_grid;
+    CannonItem* m_cannon;
+    AimLineItem* m_aimLine;
+
+    QTimer* m_gameLoopTimer;
+    QTimer* m_rowPushTimer;
+    QTimer* m_countdownTimer;
+
+    bool m_isFlying = false;
+    QPointF m_flyingPos;
+    QPointF m_flyingVel;
+    BallColor m_flyingColor;
+
+    int m_score = 0;
+    int m_timeLeft = 120;
+    int m_shotsFired = 0;
+    bool m_isPaused = false;
+};
+
+
+================================================================================
+📄 FILE: ./src/main.cpp
+================================================================================
+#include <QApplication>
+#include "ui/MainWindow.h"
+#include "ui/ThemeManager.h"
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+    app.setStyleSheet(ThemeManager::getMasterStyleSheet());
+
+    MainWindow window;
+    window.show();
+
+    return app.exec();
+}
+
+================================================================================
+📄 FILE: ./src/core/GridManager.cpp
+================================================================================
+#include "GridManager.h"
+#include <cmath>
+#include <queue>
+#include <set>
+#include <QRandomGenerator>
+
+GridManager::GridManager() {
+    m_grid.resize(ROWS);
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        m_grid[r].resize(cols, nullptr);
+    }
+}
+
+void GridManager::initGrid() {
+    for (int r = 0; r < ROWS; ++r) {
+        for (size_t c = 0; c < m_grid[r].size(); ++c) {
+            delete m_grid[r][c];
+            m_grid[r][c] = nullptr;
+        }
+    }
+}
+
+void GridManager::loadLevel(int levelNumber) {
+    initGrid();
+    int rowsToFill = 5;
+    for (int r = 0; r < rowsToFill; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            BallColor col = static_cast<BallColor>((c + r + levelNumber) % 5);
+            m_grid[r][c] = new Ball(col, r, c);
+        }
+    }
+}
+
+void GridManager::generateRandomLevel() {
+    initGrid();
+    for (int r = 0; r < 5; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            // Cluster logic: higher probability of neighbor color
+            BallColor chosen = Ball::getRandomColor(5);
+            if (c > 0 && m_grid[r][c - 1] && QRandomGenerator::global()->bounded(100) < 65) {
+                chosen = m_grid[r][c - 1]->getColor();
+            }
+            m_grid[r][c] = new Ball(chosen, r, c);
+        }
+    }
+}
+
+void GridManager::addRowFromTop() {
+    for (int r = ROWS - 1; r > 0; --r) {
+        int currentCols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        int prevCols = ((r - 1) % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < currentCols; ++c) {
+            if (c < prevCols) {
+                m_grid[r][c] = m_grid[r - 1][c];
+                if (m_grid[r][c]) m_grid[r][c]->setGridPos(r, c);
+            } else {
+                m_grid[r][c] = nullptr;
+            }
+        }
+    }
+    // New row at 0
+    int cols0 = COLS_EVEN;
+    for (int c = 0; c < cols0; ++c) {
+        m_grid[0][c] = new Ball(Ball::getRandomColor(5), 0, c);
+    }
+}
+
+bool GridManager::isOccupied(int r, int c) const {
+    if (r < 0 || r >= ROWS) return false;
+    int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+    if (c < 0 || c >= cols) return false;
+    return m_grid[r][c] != nullptr;
+}
+
+Ball* GridManager::getBall(int r, int c) {
+    if (!isOccupied(r, c)) return nullptr;
+    return m_grid[r][c];
+}
+
+bool GridManager::setBall(int r, int c, Ball* ball) {
+    if (r < 0 || r >= ROWS) return false;
+    int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+    if (c < 0 || c >= cols) return false;
+    m_grid[r][c] = ball;
+    if (ball) ball->setGridPos(r, c);
+    return true;
+}
+
+void GridManager::removeBall(int r, int c) {
+    if (isOccupied(r, c)) {
+        delete m_grid[r][c];
+        m_grid[r][c] = nullptr;
+    }
+}
+
+QPointF GridManager::getCenterPos(int r, int c) const {
+    qreal x = BALL_RADIUS + c * BALL_DIAMETER;
+    if (r % 2 != 0) {
+        x += BALL_RADIUS; // Odd row offset
+    }
+    qreal y = BALL_RADIUS + r * (BALL_DIAMETER * 0.866025); // sqrt(3)/2
+    return QPointF(x, y);
+}
+
+void GridManager::getGridCoords(const QPointF& pos, int& outR, int& outC) const {
+    qreal rowHeight = BALL_DIAMETER * 0.866025;
+    outR = std::round((pos.y() - BALL_RADIUS) / rowHeight);
+    if (outR < 0) outR = 0;
+    if (outR >= ROWS) outR = ROWS - 1;
+
+    qreal xOffset = (outR % 2 != 0) ? BALL_RADIUS : 0.0;
+    outC = std::round((pos.x() - BALL_RADIUS - xOffset) / BALL_DIAMETER);
+    int maxCols = (outR % 2 == 0) ? COLS_EVEN : COLS_ODD;
+    if (outC < 0) outC = 0;
+    if (outC >= maxCols) outC = maxCols - 1;
+}
+
+std::vector<std::pair<int, int>> GridManager::getNeighbors(int r, int c) const {
+    std::vector<std::pair<int, int>> neighbors;
+    bool even = (r % 2 == 0);
+    std::vector<std::pair<int, int>> deltas = even ?
+        std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, -1}, {-1, 0}, {1, -1}, {1, 0}} :
+        std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {-1, 1}, {1, 0}, {1, 1}};
+
+    for (auto d : deltas) {
+        int nr = r + d.first;
+        int nc = c + d.second;
+        if (nr >= 0 && nr < ROWS) {
+            int cols = (nr % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            if (nc >= 0 && nc < cols) {
+                neighbors.push_back({nr, nc});
+            }
+        }
+    }
+    return neighbors;
+}
+
+std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC, BallColor color) {
+    std::vector<std::pair<int, int>> matched;
+    if (!isOccupied(startR, startC)) return matched;
+
+    std::set<std::pair<int, int>> visited;
+    std::queue<std::pair<int, int>> q;
+
+    q.push({startR, startC});
+    visited.insert({startR, startC});
+
+    while (!q.empty()) {
+        auto [r, c] = q.front();
+        q.pop();
+        matched.push_back({r, c});
+
+        for (auto [nr, nc] : getNeighbors(r, c)) {
+            if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
+                BallColor ncCol = m_grid[nr][nc]->getColor();
+                if (ncCol == color || ncCol == BallColor::RAINBOW || color == BallColor::RAINBOW) {
+                    visited.insert({nr, nc});
+                    q.push({nr, nc});
+                }
+            }
+        }
+    }
+
+    if (matched.size() < 3 && color != BallColor::RAINBOW) {
+        return {};
+    }
+    return matched;
+}
+
+std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
+    std::set<std::pair<int, int>> connectedToTop;
+    std::queue<std::pair<int, int>> q;
+
+    // Start BFS from row 0
+    for (int c = 0; c < COLS_EVEN; ++c) {
+        if (isOccupied(0, c)) {
+            q.push({0, c});
+            connectedToTop.insert({0, c});
+        }
+    }
+
+    while (!q.empty()) {
+        auto [r, c] = q.front();
+        q.pop();
+
+        for (auto [nr, nc] : getNeighbors(r, c)) {
+            if (isOccupied(nr, nc) && connectedToTop.find({nr, nc}) == connectedToTop.end()) {
+                connectedToTop.insert({nr, nc});
+                q.push({nr, nc});
+            }
+        }
+    }
+
+    std::vector<std::pair<int, int>> floating;
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (isOccupied(r, c) && connectedToTop.find({r, c}) == connectedToTop.end()) {
+                floating.push_back({r, c});
+            }
+        }
+    }
+    return floating;
+}
+
+bool GridManager::isBottomReached() const {
+    int lastRow = ROWS - 1;
+    int cols = (lastRow % 2 == 0) ? COLS_EVEN : COLS_ODD;
+    for (int c = 0; c < cols; ++c) {
+        if (isOccupied(lastRow, c)) return true;
+    }
+    return false;
+}
+
+bool GridManager::isCleared() const {
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid[r][c]) return false;
+        }
+    }
+    return true;
+}
+
+std::vector<BallColor> GridManager::getRemainingColors() const {
+    std::set<BallColor> colors;
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid[r][c]) {
+                colors.insert(m_grid[r][c]->getColor());
+            }
+        }
+    }
+    return std::vector<BallColor>(colors.begin(), colors.end());
+}
+
+
+================================================================================
+📄 FILE: ./src/core/Ball.h
+================================================================================
+#pragma once
+#include <QColor>
+#include <QGraphicsItem>
+#include <QPainter>
+
+enum class BallColor {
+    RED,
+    BLUE,
+    GREEN,
+    YELLOW,
+    PURPLE,
+    BLACK,       // Unpoppable ground ball
+    DUAL,        // Bonus: Dual-color ball
+    LOCKED,      // Bonus: Locked ball
+    RAINBOW,     // Special: Wildcard
+    BOMB,        // Special: Explosive
+    LASER        // Special: Laser line clear
+};
+
+enum class TimeEffect {
+    NONE,
+    PAUSE,
+    SLOW_MOTION
+};
+
+class Ball {
+public:
+    Ball(BallColor color = BallColor::RED, int row = -1, int col = -1);
+
+    BallColor getColor() const { return m_color; }
+    void setColor(BallColor c) { m_color = c; }
+
+    int getRow() const { return m_row; }
+    int getCol() const { return m_col; }
+    void setGridPos(int r, int c) { m_row = r; m_col = c; }
+
+    bool isLocked() const { return m_locked; }
+    void unlock() { m_locked = false; }
+
+    TimeEffect getTimeEffect() const { return m_effect; }
+    void setTimeEffect(TimeEffect eff) { m_effect = eff; }
+
+    static QColor toQColor(BallColor c);
+    static BallColor getRandomColor(int colorCount = 5);
+
+private:
+    BallColor m_color;
+    int m_row;
+    int m_col;
+    bool m_locked;
+    TimeEffect m_effect;
+};
+
+
+================================================================================
+📄 FILE: ./src/core/SoundManager.h
+================================================================================
+#pragma once
+#include <QObject>
+
+class SoundManager : public QObject {
+    Q_OBJECT
+public:
+    static SoundManager& instance();
+
+    void setSfxVolume(int volume);
+    int getSfxVolume() const { return m_sfxVolume; }
+    void setMusicVolume(int volume);
+    int getMusicVolume() const { return m_musicVolume; }
+
+    void playPop();
+    void playShoot();
+    void playGameOver();
+    void playWin();
+
+private:
+    SoundManager(QObject* parent = nullptr);
+    int m_sfxVolume = 80;
+    int m_musicVolume = 50;
+};
+
+
+================================================================================
+📄 FILE: ./src/core/SoundManager.cpp
+================================================================================
+#include "SoundManager.h"
+#include <QDebug>
+
+SoundManager& SoundManager::instance() {
+    static SoundManager s_instance;
+    return s_instance;
+}
+
+SoundManager::SoundManager(QObject* parent) : QObject(parent) {}
+
+void SoundManager::setSfxVolume(int volume) { m_sfxVolume = volume; }
+void SoundManager::setMusicVolume(int volume) { m_musicVolume = volume; }
+
+void SoundManager::playPop() {
+    qDebug() << "[SFX] Pop played at volume" << m_sfxVolume;
+}
+
+void SoundManager::playShoot() {
+    qDebug() << "[SFX] Shoot played at volume" << m_sfxVolume;
+}
+
+void SoundManager::playGameOver() {
+    qDebug() << "[SFX] Game Over sound played";
+}
+
+void SoundManager::playWin() {
+    qDebug() << "[SFX] Win victory sound played";
+}
+
+
+================================================================================
+📄 FILE: ./src/core/GridManager.h
+================================================================================
+#pragma once
+#include "Ball.h"
+#include <vector>
+#include <QPointF>
+#include <QSet>
+
+class GridManager {
+public:
+    static const int ROWS = 14;
+    static const int COLS_EVEN = 8;
+    static const int COLS_ODD = 7;
+    static constexpr qreal BALL_RADIUS = 22.0;
+    static constexpr qreal BALL_DIAMETER = BALL_RADIUS * 2.0;
+
+    GridManager();
+
+    void initGrid();
+    void loadLevel(int levelNumber);
+    void generateRandomLevel();
+    void addRowFromTop();
+
+    bool isOccupied(int r, int c) const;
+    Ball* getBall(int r, int c);
+    bool setBall(int r, int c, Ball* ball);
+    void removeBall(int r, int c);
+
+    QPointF getCenterPos(int r, int c) const;
+    void getGridCoords(const QPointF& pos, int& outR, int& outC) const;
+
+    std::vector<std::pair<int, int>> getNeighbors(int r, int c) const;
+    std::vector<std::pair<int, int>> findMatches(int startR, int startC, BallColor color);
+    std::vector<std::pair<int, int>> findFloatingBalls();
+
+    bool isBottomReached() const;
+    bool isCleared() const;
+    std::vector<BallColor> getRemainingColors() const;
+
+private:
+    std::vector<std::vector<Ball*>> m_grid;
+};
+
+
+================================================================================
+📄 FILE: ./src/core/ScoreManager.h
+================================================================================
+#pragma once
+#include <QString>
+#include <QVector>
+#include <QPair>
+
+struct ScoreRecord {
+    QString username;
+    QString mode;
+    int score;
+};
+
+class ScoreManager {
+public:
+    ScoreManager(const QString& filePath = "scores.json");
+
+    void loadScores();
+    void saveScore(const QString& username, const QString& mode, int score);
+    QVector<ScoreRecord> getScores() const;
+
+private:
+    QString m_filePath;
+    QVector<ScoreRecord> m_records;
+};
+
+
+================================================================================
+📄 FILE: ./src/core/Ball.cpp
+================================================================================
+#include "Ball.h"
+#include <QRandomGenerator>
+
+Ball::Ball(BallColor color, int row, int col)
+    : m_color(color), m_row(row), m_col(col), m_locked(color == BallColor::LOCKED), m_effect(TimeEffect::NONE) {}
+
+QColor Ball::toQColor(BallColor c) {
+    switch (c) {
+        case BallColor::RED: return QColor(235, 77, 75);
+        case BallColor::BLUE: return QColor(72, 52, 212);
+        case BallColor::GREEN: return QColor(106, 176, 76);
+        case BallColor::YELLOW: return QColor(249, 202, 36);
+        case BallColor::PURPLE: return QColor(190, 46, 221);
+        case BallColor::BLACK: return QColor(44, 62, 80);
+        case BallColor::DUAL: return QColor(224, 86, 253);
+        case BallColor::LOCKED: return QColor(149, 175, 192);
+        case BallColor::RAINBOW: return QColor(255, 255, 255);
+        case BallColor::BOMB: return QColor(231, 76, 60);
+        case BallColor::LASER: return QColor(0, 210, 211);
+    }
+    return Qt::white;
+}
+
+BallColor Ball::getRandomColor(int colorCount) {
+    int r = QRandomGenerator::global()->bounded(colorCount);
+    switch (r) {
+        case 0: return BallColor::RED;
+        case 1: return BallColor::BLUE;
+        case 2: return BallColor::GREEN;
+        case 3: return BallColor::YELLOW;
+        case 4: return BallColor::PURPLE;
+        default: return BallColor::RED;
+    }
+}
+
+
+================================================================================
+📄 FILE: ./src/core/ScoreManager.cpp
+================================================================================
+#include "ScoreManager.h"
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <algorithm>
+
+ScoreManager::ScoreManager(const QString& filePath) : m_filePath(filePath) {
+    loadScores();
+}
+
+void ScoreManager::loadScores() {
+    m_records.clear();
+    QFile file(m_filePath);
+    if (!file.open(QIODevice::ReadOnly)) return;
+
+    QByteArray data = file.readAll();
+    file.close();
+
+    QJsonDocument doc = QJsonDocument::fromJson(data);
+    if (!doc.isArray()) return;
+
+    QJsonArray arr = doc.array();
+    for (auto val : arr) {
+        QJsonObject obj = val.toObject();
+        ScoreRecord rec;
+        rec.username = obj["username"].toString();
+        rec.mode = obj["mode"].toString();
+        rec.score = obj["score"].toInt();
+        m_records.append(rec);
+    }
+}
+
+void ScoreManager::saveScore(const QString& username, const QString& mode, int score) {
+    m_records.append({username, mode, score});
+    std::sort(m_records.begin(), m_records.end(), [](const ScoreRecord& a, const ScoreRecord& b) {
+        return a.score > b.score;
+    });
+
+    QJsonArray arr;
+    for (const auto& rec : m_records) {
+        QJsonObject obj;
+        obj["username"] = rec.username;
+        obj["mode"] = rec.mode;
+        obj["score"] = rec.score;
+        arr.append(obj);
+    }
+
+    QFile file(m_filePath);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(arr).toJson());
+        file.close();
+    }
+}
+
+QVector<ScoreRecord> ScoreManager::getScores() const {
+    return m_records;
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/GameOverDialog.h
+================================================================================
+#pragma once
+#include <QDialog>
+#include <QString>
+
+class GameOverDialog : public QDialog {
+    Q_OBJECT
+public:
+    GameOverDialog(bool won, const QString& username, int score, QWidget* parent = nullptr);
+
+signals:
+    void returnToMenu();
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/MainWindow.cpp
+================================================================================
+#include "MainWindow.h"
+#include "PauseDialog.h"
+#include "GameOverDialog.h"
+#include <QStatusBar>
+#include <QKeyEvent>
+
+MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
+    setWindowTitle("Bouncing Balls - Sharif CE Project");
+    
+    // استفاده از حداقل اندازه به جای اندازه ثابت برای سازگاری با ریسایز و فول‌اسکرین
+    setMinimumSize(420, 680);
+    resize(420, 680);
+    setStyleSheet("background-color: #1e272e;");
+
+    m_stackedWidget = new QStackedWidget(this);
+    setCentralWidget(m_stackedWidget);
+
+    m_mainMenu = new MainMenuWidget(this);
+    m_startMenu = new StartGameWidget(this);
+    m_settingsWidget = new SettingsWidget(this);
+    m_scoreboardWidget = new ScoreboardWidget(&m_scoreManager, this);
+
+    m_stackedWidget->addWidget(m_mainMenu);         // Index 0
+    m_stackedWidget->addWidget(m_startMenu);        // Index 1
+    m_stackedWidget->addWidget(m_settingsWidget);     // Index 2
+    m_stackedWidget->addWidget(m_scoreboardWidget);   // Index 3
+
+    connect(m_mainMenu, &MainMenuWidget::startGameClicked, this, [this]() { m_stackedWidget->setCurrentIndex(1); });
+    connect(m_mainMenu, &MainMenuWidget::settingsClicked, this, [this]() { m_stackedWidget->setCurrentIndex(2); });
+    connect(m_mainMenu, &MainMenuWidget::scoreboardClicked, this, [this]() {
+        m_scoreboardWidget->refresh();
+        m_stackedWidget->setCurrentIndex(3);
+    });
+    connect(m_mainMenu, &MainMenuWidget::exitClicked, this, &QMainWindow::close);
+
+    connect(m_startMenu, &StartGameWidget::launchGame, this, &MainWindow::startNewGame);
+    connect(m_startMenu, &StartGameWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    connect(m_scoreboardWidget, &ScoreboardWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+}
+
+void MainWindow::startNewGame(const QString& username, const QString& mode) {
+    m_currentUser = username;
+    m_currentMode = mode;
+
+    m_gameScene = new GameScene(username, mode, this);
+    m_gameView = new GameView(this);
+    m_gameView->setScene(m_gameScene);
+
+    connect(m_gameScene, &GameScene::gameOver, this, &MainWindow::handleGameOver);
+    connect(m_gameScene, &GameScene::gameWon, this, &MainWindow::handleGameWon);
+    connect(m_gameScene, &GameScene::pauseRequested, this, &MainWindow::showPauseMenu);
+
+    m_stackedWidget->addWidget(m_gameView);
+    m_stackedWidget->setCurrentWidget(m_gameView);
+}
+
+void MainWindow::handleGameOver(int score) {
+    m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
+    auto dlg = new GameOverDialog(false, m_currentUser, score, this);
+    connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
+    dlg->exec();
+}
+
+void MainWindow::handleGameWon(int score) {
+    m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
+    auto dlg = new GameOverDialog(true, m_currentUser, score, this);
+    connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
+    dlg->exec();
+}
+
+void MainWindow::showPauseMenu() {
+    m_gameScene->pauseGame();
+    auto dlg = new PauseDialog(this);
+    connect(dlg, &PauseDialog::resumeGame, this, [this]() { m_gameScene->resumeGame(); });
+    connect(dlg, &PauseDialog::exitToMenu, this, &MainWindow::returnToMainMenu);
+    dlg->exec();
+}
+
+void MainWindow::returnToMainMenu() {
+    m_stackedWidget->setCurrentIndex(0);
+    if (m_gameView) {
+        m_stackedWidget->removeWidget(m_gameView);
+        delete m_gameView;
+        m_gameView = nullptr;
+        m_gameScene = nullptr;
+    }
+}
+
+void MainWindow::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_F11) {
+        if (isFullScreen()) {
+            showNormal();
+        } else {
+            showFullScreen();
+        }
+    } else {
+        QMainWindow::keyPressEvent(event);
+    }
+}
+
+================================================================================
+📄 FILE: ./src/ui/poolballswidget.cpp
+================================================================================
+#include "poolballswidget.h"
+
+#include <QRandomGenerator>
+#include <QSurfaceFormat>
+#include <QDebug>
+
+namespace {
+
+constexpr int kBallCount = 6;
+constexpr int kTargetFPS = 60;
+
+const char *kVertexShaderSrc = R"GLSL(
+#version 330 core
+layout(location = 0) in vec2 aUnit;
+uniform vec2 uCenterNDC;
+uniform vec2 uRadiusNDC;
+out vec2 vUV;
+void main()
+{
+    vUV = aUnit;
+    vec2 pos = uCenterNDC + aUnit * uRadiusNDC;
+    gl_Position = vec4(pos, 0.0, 1.0);
+}
+)GLSL";
+
+const char *kFragmentShaderSrc = R"GLSL(
+#version 330 core
+in vec2 vUV;
+out vec4 fragColor;
+
+uniform vec3 uBaseColor;
+uniform vec3 uLightDir;
+
+void main()
+{
+    float r2 = dot(vUV, vUV);
+    if (r2 > 1.0) discard;
+
+    vec3 normal   = normalize(vec3(vUV, sqrt(max(1.0 - r2, 0.0))));
+    vec3 lightDir = normalize(uLightDir);
+    vec3 viewDir  = vec3(0.0, 0.0, 1.0);
+    vec3 halfDir  = normalize(lightDir + viewDir);
+
+    float diff = max(dot(normal, lightDir), 0.0);
+    float spec = pow(max(dot(normal, halfDir), 0.0), 48.0);
+    float fresnel = pow(1.0 - normal.z, 2.5);
+
+    vec3 color = uBaseColor * (0.28 + 0.72 * diff);
+    color += vec3(1.0) * spec * 0.9;
+    color = mix(color, vec3(0.65, 0.88, 1.0), fresnel * 0.35);
+
+    float edge = smoothstep(1.0, 0.9, r2);
+    fragColor = vec4(color, edge);
+}
+)GLSL";
+
+} // namespace
+
+PoolBallsWidget::PoolBallsWidget(QWidget *parent)
+    : QOpenGLWidget(parent)
+{
+    QSurfaceFormat format;
+    format.setVersion(3, 3);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setAlphaBufferSize(8);
+    format.setSamples(4);
+    format.setSwapInterval(1);
+    setFormat(format);
+
+    setAttribute(Qt::WA_NoSystemBackground);
+
+    auto *rng = QRandomGenerator::global();
+    static const QVector3D palette[] = {
+        {0.95f, 0.25f, 0.25f}, {0.25f, 0.55f, 0.95f}, {0.98f, 0.82f, 0.20f},
+        {0.30f, 0.85f, 0.45f}, {0.85f, 0.35f, 0.85f}, {1.00f, 0.55f, 0.15f},
+    };
+
+    m_balls.reserve(kBallCount);
+    for (int i = 0; i < kBallCount; ++i)
+    {
+        Ball b;
+        b.pos = QVector2D(float(rng->generateDouble()), float(rng->generateDouble()));
+        b.velocity = QVector2D(float(rng->generateDouble()) - 0.5f,
+                                float(rng->generateDouble()) - 0.5f) * 0.25f;
+        b.radiusPx = 26.0f + float(rng->bounded(22));
+        b.color = palette[i % 6];
+        m_balls.append(b);
+    }
+
+    m_clock.start();
+    connect(&m_frameTimer, &QTimer::timeout, this, [this] { update(); });
+    m_frameTimer.start(1000 / kTargetFPS);
+}
+
+void PoolBallsWidget::initializeGL()
+{
+    initializeOpenGLFunctions();
+
+    // Solid base color -- this is the "pool floor" visible through parted water.
+    glClearColor(0.02f, 0.09f, 0.15f, 1.0f);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    setupShaders();
+    setupGeometry();
+    m_lastFrameMs = m_clock.elapsed();
+}
+
+void PoolBallsWidget::setupShaders()
+{
+    m_program = new QOpenGLShaderProgram(this);
+
+    if (!m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShaderSrc))
+        qWarning() << "[Balls] vertex shader compile error:" << m_program->log();
+    if (!m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShaderSrc))
+        qWarning() << "[Balls] fragment shader compile error:" << m_program->log();
+    if (!m_program->link())
+        qWarning() << "[Balls] shader link error:" << m_program->log();
+
+    m_uCenterLoc   = m_program->uniformLocation("uCenterNDC");
+    m_uRadiusLoc   = m_program->uniformLocation("uRadiusNDC");
+    m_uColorLoc    = m_program->uniformLocation("uBaseColor");
+    m_uLightDirLoc = m_program->uniformLocation("uLightDir");
+}
+
+void PoolBallsWidget::setupGeometry()
+{
+    static const GLfloat unitQuad[] = {
+        -1.f, -1.f,
+         1.f, -1.f,
+        -1.f,  1.f,
+         1.f,  1.f,
+    };
+
+    m_vao.create();
+    m_vao.bind();
+
+    m_vbo.create();
+    m_vbo.bind();
+    m_vbo.allocate(unitQuad, sizeof(unitQuad));
+
+    m_program->bind();
+    m_program->enableAttributeArray(0);
+    m_program->setAttributeBuffer(0, GL_FLOAT, 0, 2, 2 * sizeof(GLfloat));
+    m_program->release();
+
+    m_vbo.release();
+    m_vao.release();
+}
+
+void PoolBallsWidget::resizeGL(int w, int h)
+{
+    glViewport(0, 0, w, h);
+}
+
+void PoolBallsWidget::stepSimulation(float dt)
+{
+    for (auto &b : m_balls)
+    {
+        b.pos += b.velocity * dt;
+
+        if (b.pos.x() < 0.0f || b.pos.x() > 1.0f) b.velocity.setX(-b.velocity.x());
+        if (b.pos.y() < 0.0f || b.pos.y() > 1.0f) b.velocity.setY(-b.velocity.y());
+
+        b.pos.setX(qBound(0.0f, b.pos.x(), 1.0f));
+        b.pos.setY(qBound(0.0f, b.pos.y(), 1.0f));
+    }
+}
+
+void PoolBallsWidget::paintGL()
+{
+    const qint64 now = m_clock.elapsed();
+    const float dt = qMax(0.0f, float(now - m_lastFrameMs) / 1000.0f);
+    m_lastFrameMs = now;
+
+    stepSimulation(dt);
+
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_program->bind();
+    m_vao.bind();
+    m_program->setUniformValue(m_uLightDirLoc, QVector3D(-0.4f, 0.6f, 0.7f));
+
+    for (const auto &b : m_balls)
+    {
+        QVector2D centerNDC(b.pos.x() * 2.0f - 1.0f, b.pos.y() * 2.0f - 1.0f);
+        float rx = (b.radiusPx / float(qMax(1, width())))  * 2.0f;
+        float ry = (b.radiusPx / float(qMax(1, height()))) * 2.0f;
+
+        m_program->setUniformValue(m_uCenterLoc, centerNDC);
+        m_program->setUniformValue(m_uRadiusLoc, QVector2D(rx, ry));
+        m_program->setUniformValue(m_uColorLoc, b.color);
+
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
+
+    m_vao.release();
+    m_program->release();
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/StartGameWidget.h
+================================================================================
+#pragma once
+#include <QWidget>
+#include <QLineEdit>
+#include <QComboBox>
+
+class StartGameWidget : public QWidget {
+    Q_OBJECT
+public:
+    StartGameWidget(QWidget* parent = nullptr);
+
+signals:
+    void launchGame(const QString& username, const QString& mode);
+    void backClicked();
+
+private:
+    QLineEdit* m_nameInput;
+    QComboBox* m_modeCombo;
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/poolballswidget.h
+================================================================================
+#pragma once
+
+#include <QOpenGLWidget>
+#include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QOpenGLVertexArrayObject>
+#include <QElapsedTimer>
+#include <QTimer>
+#include <QVector2D>
+#include <QVector3D>
+#include <QVector>
+
+/**
+ * PoolBallsWidget
+ * ---------------
+ * Renders a handful of "3D" balls using the classic sphere-impostor trick:
+ * each ball is a single flat quad, and the fragment shader reconstructs a
+ * sphere normal analytically from the quad's local UV. No 3D geometry, no
+ * mesh, fully lit and antialiased, and cheap enough for dozens of balls.
+ *
+ * This widget sits *underneath* WaterBackgroundWidget in the z-order, so
+ * it becomes visible through the water wherever the water is "parted".
+ */
+class PoolBallsWidget : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core
+{
+    Q_OBJECT
+
+public:
+    explicit PoolBallsWidget(QWidget *parent = nullptr);
+
+protected:
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
+
+private:
+    struct Ball
+    {
+        QVector2D pos;      // normalized position, 0..1
+        QVector2D velocity; // normalized units / second
+        float radiusPx = 30.0f;
+        QVector3D color;
+    };
+
+    void setupShaders();
+    void setupGeometry();
+    void stepSimulation(float dt);
+
+    QOpenGLShaderProgram *m_program = nullptr;
+    QOpenGLBuffer m_vbo{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject m_vao;
+
+    QElapsedTimer m_clock;
+    QTimer m_frameTimer;
+    qint64 m_lastFrameMs = 0;
+
+    QVector<Ball> m_balls;
+
+    int m_uCenterLoc = -1;
+    int m_uRadiusLoc = -1;
+    int m_uColorLoc = -1;
+    int m_uLightDirLoc = -1;
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/PauseDialog.h
+================================================================================
+#pragma once
+#include <QDialog>
+
+class PauseDialog : public QDialog {
+    Q_OBJECT
+public:
+    PauseDialog(QWidget* parent = nullptr);
+
+signals:
+    void resumeGame();
+    void exitToMenu();
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/AdvancedSettingsWidget.cpp
+================================================================================
+#include "AdvancedSettingsWidget.h"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QFormLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QComboBox>
+#include <QSlider>
+#include <QCheckBox>
+#include <QPainter>
+#include <QMouseEvent>
+#include <QGraphicsDropShadowEffect>
+
+AdvancedSettingsWidget::AdvancedSettingsWidget(QWidget* parent) : QWidget(parent) {
+    setMouseTracking(true);
+    setupUI();
+}
+
+void AdvancedSettingsWidget::setupUI() {
+    auto mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(0, 0, 0, 0);
+
+    // کانتینر اصلی که با موس جابجا می‌شود (افکت پارالاکس)
+    m_hologramContainer = new QWidget(this);
+    m_hologramContainer->setStyleSheet("background: transparent;");
+    auto containerLayout = new QVBoxLayout(m_hologramContainer);
+    containerLayout->setContentsMargins(80, 60, 80, 60);
+
+    auto glassPanel = new QWidget(m_hologramContainer);
+    glassPanel->setStyleSheet(R"(
+        QWidget {
+            background: rgba(10, 15, 25, 0.85);
+            border: 2px solid rgba(0, 242, 254, 0.3);
+            border-radius: 15px;
+        }
+    )");
+
+    auto shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(40);
+    shadow->setColor(QColor(0, 242, 254, 80));
+    shadow->setOffset(0, 0);
+    glassPanel->setGraphicsEffect(shadow);
+
+    auto panelLayout = new QVBoxLayout(glassPanel);
+    panelLayout->setContentsMargins(40, 40, 40, 40);
+
+    auto title = new QLabel("/// TERMINAL: ADVANCED SETTINGS", glassPanel);
+    title->setStyleSheet("color: #00F2FE; font-size: 28px; font-weight: 900; letter-spacing: 5px; border: none; background: transparent;");
+    panelLayout->addWidget(title);
+    panelLayout->addSpacing(20);
+
+    // تب‌های پیشرفته
+    auto tabWidget = new QTabWidget(glassPanel);
+    tabWidget->setStyleSheet(R"(
+        QTabWidget::pane { border: 1px solid rgba(0, 242, 254, 0.2); background: rgba(0, 0, 0, 0.3); border-radius: 8px; }
+        QTabBar::tab { background: rgba(255,255,255,0.05); color: #64748B; padding: 12px 30px; font-size: 16px; font-weight: bold; border: 1px solid transparent; }
+        QTabBar::tab:selected { background: rgba(0, 242, 254, 0.15); color: #00F2FE; border: 1px solid rgba(0, 242, 254, 0.5); border-bottom: none; }
+    )");
+
+    tabWidget->addTab(createGraphicsTab(), "🖥 GRAPHICS");
+    tabWidget->addTab(createAudioTab(), "🔊 AUDIO");
+    tabWidget->addTab(createGameplayTab(), "🎮 GAMEPLAY");
+    tabWidget->addTab(createAccessibilityTab(), "👁 ACCESSIBILITY");
+    panelLayout->addWidget(tabWidget);
+
+    // دکمه بازگشت
+    auto backBtn = new QPushButton("« RETURN TO QUICK SETTINGS", glassPanel);
+    backBtn->setStyleSheet(R"(
+        QPushButton { background: rgba(255, 51, 102, 0.1); border: 1px solid #FF3366; border-radius: 8px; padding: 12px 20px; font-size: 16px; font-weight: bold; color: #FF3366; }
+        QPushButton:hover { background: rgba(255, 51, 102, 0.3); color: #FFFFFF; }
+    )");
+    connect(backBtn, &QPushButton::clicked, this, &AdvancedSettingsWidget::backClicked);
+    
+    auto bottomLayout = new QHBoxLayout();
+    bottomLayout->addStretch();
+    bottomLayout->addWidget(backBtn);
+    panelLayout->addLayout(bottomLayout);
+
+    containerLayout->addWidget(glassPanel);
+    mainLayout->addWidget(m_hologramContainer);
+}
+
+// توابع کمکی برای ساخت استایل‌های تکراری
+QString labelStyle() { return "color: #E2E8F0; font-size: 16px; font-weight: bold; border: none; background: transparent;"; }
+QString comboStyle() { return "QComboBox { background: rgba(255,255,255,0.05); border: 1px solid rgba(0,242,254,0.3); color: #FFF; padding: 6px 12px; font-size: 14px; border-radius: 4px; }"; }
+
+QWidget* AdvancedSettingsWidget::createGraphicsTab() {
+    auto w = new QWidget();
+    auto form = new QFormLayout(w);
+    form->setSpacing(25); form->setContentsMargins(30, 30, 30, 30);
+
+    auto res = new QComboBox(w); res->addItems({"1920x1080", "2560x1440", "3840x2160"}); res->setStyleSheet(comboStyle());
+    auto fps = new QComboBox(w); fps->addItems({"60 FPS", "120 FPS", "144 FPS", "Unlimited"}); fps->setStyleSheet(comboStyle());
+    auto aa = new QComboBox(w); aa->addItems({"Off", "MSAA 2x", "MSAA 4x", "MSAA 8x"}); aa->setStyleSheet(comboStyle());
+    auto particles = new QComboBox(w); particles->addItems({"Low", "Medium", "High", "Ultra"}); particles->setStyleSheet(comboStyle());
+    
+    auto vsync = new QCheckBox("Enable V-Sync", w);
+    vsync->setStyleSheet("color: #00F2FE; font-size: 16px; font-weight: bold; background: transparent; border: none;");
+
+    auto l1 = new QLabel("Resolution:", w); l1->setStyleSheet(labelStyle());
+    auto l2 = new QLabel("FPS Limit:", w); l2->setStyleSheet(labelStyle());
+    auto l3 = new QLabel("Anti-Aliasing:", w); l3->setStyleSheet(labelStyle());
+    auto l4 = new QLabel("Particle Density:", w); l4->setStyleSheet(labelStyle());
+
+    form->addRow(l1, res); form->addRow(l2, fps);
+    form->addRow(l3, aa); form->addRow(l4, particles);
+    form->addRow("", vsync);
+    return w;
+}
+
+QWidget* AdvancedSettingsWidget::createAudioTab() {
+    auto w = new QWidget();
+    auto form = new QFormLayout(w);
+    form->setSpacing(25); form->setContentsMargins(30, 30, 30, 30);
+    // ساختار مشابه برای صدا (اسلایدرها)
+    auto device = new QComboBox(w); device->addItems({"Default System Device", "Headphones", "Speakers"}); device->setStyleSheet(comboStyle());
+    auto l1 = new QLabel("Output Device:", w); l1->setStyleSheet(labelStyle());
+    form->addRow(l1, device);
+    return w;
+}
+
+QWidget* AdvancedSettingsWidget::createGameplayTab() {
+    auto w = new QWidget();
+    auto form = new QFormLayout(w);
+    form->setSpacing(25); form->setContentsMargins(30, 30, 30, 30);
+    auto aimAssist = new QComboBox(w); aimAssist->addItems({"Off", "Short Trajectory", "Long Trajectory"}); aimAssist->setStyleSheet(comboStyle());
+    auto l1 = new QLabel("Aim Assist:", w); l1->setStyleSheet(labelStyle());
+    form->addRow(l1, aimAssist);
+    return w;
+}
+
+QWidget* AdvancedSettingsWidget::createAccessibilityTab() {
+    auto w = new QWidget();
+    auto form = new QFormLayout(w);
+    form->setSpacing(25); form->setContentsMargins(30, 30, 30, 30);
+    auto cbMode = new QComboBox(w); cbMode->addItems({"Off (Default)", "Protanopia (Red-Blind)", "Deuteranopia (Green-Blind)", "Tritanopia (Blue-Blind)"}); cbMode->setStyleSheet(comboStyle());
+    auto l1 = new QLabel("Colorblind Mode:", w); l1->setStyleSheet(labelStyle());
+    form->addRow(l1, cbMode);
+    return w;
+}
+
+void AdvancedSettingsWidget::mouseMoveEvent(QMouseEvent* event) {
+    m_mousePos = event->position();
+    
+    // افکت پارالاکس (Parallax): کانتینر در جهت مخالف موس حرکت می‌کند
+    qreal offsetX = (m_mousePos.x() - width() / 2.0) * 0.02; // ضریب جابجایی
+    qreal offsetY = (m_mousePos.y() - height() / 2.0) * 0.02;
+    
+    m_hologramContainer->setContentsMargins(80 - offsetX, 60 - offsetY, 80 + offsetX, 60 + offsetY);
+    update(); // رندر مجدد گرید پس‌زمینه
+}
+
+void AdvancedSettingsWidget::paintEvent(QPaintEvent* event) {
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // بک‌گراند سایبرپانک
+    painter.fillRect(rect(), QColor(5, 8, 12));
+
+    // گرید سه‌بعدی هولوگرامی (متحرک با موس)
+    qreal offsetX = (m_mousePos.x() - width() / 2.0) * 0.05;
+    qreal offsetY = (m_mousePos.y() - height() / 2.0) * 0.05;
+
+    painter.setPen(QPen(QColor(0, 242, 254, 20), 1));
+    for (int x = -100; x < width() + 100; x += 40) {
+        painter.drawLine(x + offsetX, 0, x + offsetX * 1.5, height());
+    }
+    for (int y = -100; y < height() + 100; y += 40) {
+        painter.drawLine(0, y + offsetY, width(), y + offsetY * 1.5);
+    }
+}
+
+================================================================================
+📄 FILE: ./src/ui/ScoreboardWidget.cpp
+================================================================================
+#include "ScoreboardWidget.h"
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QHeaderView>
+
+ScoreboardWidget::ScoreboardWidget(ScoreManager* scoreMgr, QWidget* parent)
+    : QWidget(parent), m_scoreMgr(scoreMgr) {
+    auto layout = new QVBoxLayout(this);
+    layout->setAlignment(Qt::AlignCenter);
+
+    auto title = new QLabel("Leaderboard / Scores", this);
+    title->setStyleSheet("font-size: 22px; font-weight: bold; color: #ecf0f1; margin-bottom: 10px;");
+    layout->addWidget(title, 0, Qt::AlignCenter);
+
+    m_table = new QTableWidget(this);
+    m_table->setColumnCount(3);
+    m_table->setHorizontalHeaderLabels({"Player", "Mode", "Score"});
+    m_table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    m_table->setStyleSheet("QTableWidget { background-color: #2c3e50; color: white; gridline-color: #34495e; }"
+                           "QHeaderView::section { background-color: #1abc9c; color: white; font-weight: bold; }");
+    m_table->setMinimumSize(320, 260);
+    layout->addWidget(m_table);
+
+    auto backBtn = new QPushButton("Back to Menu", this);
+    backBtn->setStyleSheet("QPushButton { background-color: #7f8c8d; color: white; font-size: 14px; "
+                           "padding: 8px 20px; border-radius: 6px; } QPushButton:hover { background-color: #95a5a6; }");
+    connect(backBtn, &QPushButton::clicked, this, &ScoreboardWidget::backClicked);
+    layout->addWidget(backBtn, 0, Qt::AlignCenter);
+
+    refresh();
+}
+
+void ScoreboardWidget::refresh() {
+    m_scoreMgr->loadScores();
+    auto scores = m_scoreMgr->getScores();
+    m_table->setRowCount(scores.size());
+    for (int i = 0; i < scores.size(); ++i) {
+        m_table->setItem(i, 0, new QTableWidgetItem(scores[i].username));
+        m_table->setItem(i, 1, new QTableWidgetItem(scores[i].mode));
+        m_table->setItem(i, 2, new QTableWidgetItem(QString::number(scores[i].score)));
+    }
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/MainMenuWidget.h
+================================================================================
+#pragma once
+#include <QWidget>
+#include <QPushButton>
+#include <QLabel>
+#include <QTimer>
+#include <QVector>
+#include <QPointF>
+#include <QColor>
+#include <QBoxLayout>
+
+struct MenuBall {
+    QPointF pos;
+    QPointF velocity;
+    qreal radius;
+    qreal mass; // جرم توپ برای محاسبه فیزیک برخورد
+    QColor color;
+    bool isBackground;
+};
+
+struct GasBubble {
+    QPointF pos;
+    qreal speed;
+    qreal size;
+    qreal wobblePhase;
+};
+
+class MainMenuWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit MainMenuWidget(QWidget* parent = nullptr);
+
+    signals:
+        void startGameClicked();
+    void scoreboardClicked();
+    void settingsClicked();
+    void exitClicked();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private slots:
+    void updateAnimation();
+
+private:
+    void setupUI();
+    void initBalls();
+    void initBubbles();
+    void resetBallsToCorners(int w, int h); // شلیک مجدد از گوشه‌ها
+
+    QTimer* m_animTimer;
+    QVector<MenuBall> m_balls;
+    QVector<GasBubble> m_bubbles;
+    QPointF m_mousePos;
+    
+    QBoxLayout* m_buttonsLayout;
+    QLabel* m_titleLabel; // برای تغییر سایز دینامیک
+    qreal m_time = 0.0;
+};
+
+================================================================================
+📄 FILE: ./src/ui/StartGameWidget.cpp
+================================================================================
+#include "StartGameWidget.h"
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+
+StartGameWidget::StartGameWidget(QWidget* parent) : QWidget(parent) {
+    auto layout = new QVBoxLayout(this);
+    layout->setAlignment(Qt::AlignCenter);
+    layout->setSpacing(15);
+
+    auto title = new QLabel("Select Mode & Player", this);
+    title->setStyleSheet("font-size: 22px; font-weight: bold; color: #ecf0f1;");
+    layout->addWidget(title, 0, Qt::AlignCenter);
+
+    m_nameInput = new QLineEdit(this);
+    m_nameInput->setPlaceholderText("Enter your username...");
+    m_nameInput->setStyleSheet("padding: 10px; font-size: 14px; border-radius: 6px; min-width: 200px;");
+    layout->addWidget(m_nameInput, 0, Qt::AlignCenter);
+
+    m_modeCombo = new QComboBox(this);
+    m_modeCombo->addItems({"Classic", "Time", "Random", "Endless"});
+    m_modeCombo->setStyleSheet("padding: 8px; font-size: 14px; border-radius: 6px; min-width: 200px;");
+    layout->addWidget(m_modeCombo, 0, Qt::AlignCenter);
+
+    auto playBtn = new QPushButton("Play", this);
+    playBtn->setStyleSheet("QPushButton { background-color: #27ae60; color: white; font-size: 16px; font-weight: bold; "
+                           "padding: 10px 30px; border-radius: 8px; min-width: 150px; } "
+                           "QPushButton:hover { background-color: #2ecc71; }");
+    connect(playBtn, &QPushButton::clicked, this, [this]() {
+        QString user = m_nameInput->text().trimmed();
+        if (user.isEmpty()) user = "Player";
+        emit launchGame(user, m_modeCombo->currentText());
+    });
+    layout->addWidget(playBtn, 0, Qt::AlignCenter);
+
+    auto backBtn = new QPushButton("Back", this);
+    backBtn->setStyleSheet("QPushButton { background-color: #7f8c8d; color: white; font-size: 14px; "
+                           "padding: 8px 20px; border-radius: 6px; } QPushButton:hover { background-color: #95a5a6; }");
+    connect(backBtn, &QPushButton::clicked, this, &StartGameWidget::backClicked);
+    layout->addWidget(backBtn, 0, Qt::AlignCenter);
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/AdvancedSettingsWidget.h
+================================================================================
+#pragma once
+#include <QWidget>
+#include <QTabWidget>
+#include <QPointF>
+
+class AdvancedSettingsWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit AdvancedSettingsWidget(QWidget* parent = nullptr);
+
+    signals:
+        void backClicked();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+
+private:
+    void setupUI();
+    QWidget* createGraphicsTab();
+    QWidget* createAudioTab();
+    QWidget* createGameplayTab();
+    QWidget* createAccessibilityTab();
+
+    QPointF m_mousePos; // برای افکت پارالاکس هولوگرامی
+    QWidget* m_hologramContainer;
+};
+
+================================================================================
+📄 FILE: ./src/ui/GameOverDialog.cpp
+================================================================================
+#include "GameOverDialog.h"
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+
+GameOverDialog::GameOverDialog(bool won, const QString& username, int score, QWidget* parent)
+    : QDialog(parent) {
+    setModal(true);
+    setStyleSheet("background-color: #2c3e50; color: white;");
+
+    auto layout = new QVBoxLayout(this);
+    layout->setSpacing(15);
+
+    auto title = new QLabel(won ? "🎉 Victory! 🎉" : "💀 Game Over 💀", this);
+    title->setStyleSheet(won ? "font-size: 22px; font-weight: bold; color: #2ecc71;"
+                             : "font-size: 22px; font-weight: bold; color: #e74c3c;");
+    layout->addWidget(title, 0, Qt::AlignCenter);
+
+    auto info = new QLabel(QString("Player: %1\nScore: %2").arg(username).arg(score), this);
+    info->setStyleSheet("font-size: 16px; color: #ecf0f1; text-align: center;");
+    layout->addWidget(info, 0, Qt::AlignCenter);
+
+    auto returnBtn = new QPushButton("Return to Main Menu", this);
+    returnBtn->setStyleSheet("background-color: #2980b9; color: white; padding: 10px 20px; font-weight: bold; border-radius: 6px;");
+    connect(returnBtn, &QPushButton::clicked, this, [this]() {
+        emit returnToMenu();
+        accept();
+    });
+    layout->addWidget(returnBtn);
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/ScoreboardWidget.h
+================================================================================
+#pragma once
+#include <QWidget>
+#include <QTableWidget>
+#include "../core/ScoreManager.h"
+
+class ScoreboardWidget : public QWidget {
+    Q_OBJECT
+public:
+    ScoreboardWidget(ScoreManager* scoreMgr, QWidget* parent = nullptr);
+    void refresh();
+
+signals:
+    void backClicked();
+
+private:
+    ScoreManager* m_scoreMgr;
+    QTableWidget* m_table;
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/SettingsWidget.cpp
+================================================================================
+#include "SettingsWidget.h"
+#include <QPainter>
+#include <QMouseEvent>
+#include <QtMath>
+#include <QRandomGenerator>
+
+SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
+    setMouseTracking(true);
+    initTargets();
+
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, &SettingsWidget::gameLoop);
+    m_timer->start(16); // 60 FPS
+}
+
+void SettingsWidget::initTargets() {
+    m_targets.clear();
+    
+    auto addTarget = [&](TargetType type, QString label, QColor color, qreal radius) {
+        SettingTarget t;
+        t.type = type; t.label = label; t.color = color;
+        t.radius = radius;
+        // در ابتدا همه در مرکز مخفی هستند تا زمان تغییر سایز اول فرا برسد
+        t.pos = QPointF(-1000, -1000); 
+        m_targets.append(t);
+    };
+
+    addTarget(TargetType::VolUp, "VOL +", QColor(0, 255, 120), 45);
+    addTarget(TargetType::VolDown, "VOL -", QColor(255, 50, 80), 45);
+    addTarget(TargetType::Fullscreen, "DISPLAY\nMODE", QColor(0, 200, 255), 55);
+    
+    addTarget(TargetType::ThemeNeon, "THEME:\nNEON", QColor(255, 0, 255), 50);
+    addTarget(TargetType::ThemeArcade, "THEME:\nARCADE", QColor(255, 200, 0), 50);
+    
+    addTarget(TargetType::EMP, "SHOCKWAVE\n(TEST)", QColor(255, 120, 0), 40);
+    addTarget(TargetType::BackToMenu, "EXIT TO\nMENU", QColor(200, 200, 200), 65);
+
+    addTarget(TargetType::ProMode, "PRO MODE\nTERMINAL", QColor(0, 255, 100), 60);
+}
+
+void SettingsWidget::scatterTargets() {
+    // پرتاب حباب‌ها از مرکز به اطراف در لحظه باز شدن صفحه
+    QPointF center(width() / 2.0, height() / 3.0);
+    for (auto& t : m_targets) {
+        t.pos = center;
+        qreal angle = (QRandomGenerator::global()->bounded(360)) * M_PI / 180.0;
+        qreal speed = (QRandomGenerator::global()->bounded(100, 300)) / 10.0;
+        t.velocity = QPointF(std::cos(angle) * speed, std::sin(angle) * speed);
+    }
+}
+
+void SettingsWidget::gameLoop() {
+    if (width() < 100) return; // جلوگیری از باگ فشردگی قبل از رندر کامل
+
+    // آپدیت گلوله‌ها
+    for (auto& p : m_projectiles) {
+        p.pos += p.velocity;
+        if (p.pos.x() < 0 || p.pos.x() > width() || p.pos.y() < 0 || p.pos.y() > height()) {
+            p.active = false;
+        }
+    }
+    m_projectiles.erase(std::remove_if(m_projectiles.begin(), m_projectiles.end(),
+                        [](const Projectile& p) { return !p.active; }), m_projectiles.end());
+
+    // فیزیک و آپدیت حباب‌ها
+    applyTargetRepulsion(); // جلوگیری از در هم رفتن حباب‌ها
+    
+    for (int i = 0; i < m_targets.size(); ++i) {
+        auto& t = m_targets[i];
+        t.pos += t.velocity;
+        
+        t.velocity *= 0.98; // اصطکاک
+        
+        // حرکت شناور ملایم همیشگی
+        if (t.velocity.manhattanLength() < 0.6) {
+            t.velocity.setX(t.velocity.x() > 0 ? 0.6 : -0.6);
+            t.velocity.setY(t.velocity.y() > 0 ? 0.6 : -0.6);
+        }
+
+        if (t.hitScale > 1.0) t.hitScale -= 0.04;
+
+        for (auto& p : m_projectiles) {
+            if (!p.active) continue;
+            qreal dist = std::sqrt(std::pow(p.pos.x() - t.pos.x(), 2) + std::pow(p.pos.y() - t.pos.y(), 2));
+            if (dist < t.radius * t.hitScale) {
+                p.active = false;
+                triggerHitEffect(i, p.pos);
+            }
+        }
+    }
+    keepTargetsInBounds();
+
+    // آپدیت ذرات
+    for (auto& part : m_particles) {
+        part.pos += part.velocity;
+        part.life -= 0.03; 
+    }
+    m_particles.erase(std::remove_if(m_particles.begin(), m_particles.end(),
+                      [](const Particle& part) { return part.life <= 0; }), m_particles.end());
+
+    // آپدیت موج
+    if (m_empActive) {
+        m_empRadius += 30.0; 
+        if (m_empRadius > 2000) m_empActive = false;
+    }
+
+    update();
+}
+
+void SettingsWidget::applyTargetRepulsion() {
+    // سیستم دافعه مغناطیسی بین حباب‌ها تا همیشه فاصله داشته باشند
+    for (int i = 0; i < m_targets.size(); ++i) {
+        for (int j = i + 1; j < m_targets.size(); ++j) {
+            auto& t1 = m_targets[i];
+            auto& t2 = m_targets[j];
+            qreal dx = t2.pos.x() - t1.pos.x();
+            qreal dy = t2.pos.y() - t1.pos.y();
+            qreal dist = std::sqrt(dx*dx + dy*dy);
+            qreal minDist = (t1.radius + t2.radius) * 1.2; // 20% فاصله امن
+
+            if (dist < minDist && dist > 0.1) {
+                qreal force = (minDist - dist) * 0.05;
+                t1.velocity.setX(t1.velocity.x() - (dx / dist) * force);
+                t1.velocity.setY(t1.velocity.y() - (dy / dist) * force);
+                t2.velocity.setX(t2.velocity.x() + (dx / dist) * force);
+                t2.velocity.setY(t2.velocity.y() + (dy / dist) * force);
+            }
+        }
+    }
+}
+
+void SettingsWidget::keepTargetsInBounds() {
+    int w = width();
+    int h = height();
+    for (auto& t : m_targets) {
+        if (t.pos.x() - t.radius < 50) { t.pos.setX(t.radius + 50); t.velocity.setX(std::abs(t.velocity.x())); }
+        if (t.pos.x() + t.radius > w - 50) { t.pos.setX(w - t.radius - 50); t.velocity.setX(-std::abs(t.velocity.x())); }
+        
+        if (t.pos.y() - t.radius < 120) { t.pos.setY(t.radius + 120); t.velocity.setY(std::abs(t.velocity.y())); }
+        if (t.pos.y() + t.radius > h - 180) { t.pos.setY(h - t.radius - 180); t.velocity.setY(-std::abs(t.velocity.y())); }
+    }
+}
+
+void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
+    auto& t = m_targets[targetIndex];
+    t.hitScale = 1.3; 
+    spawnParticles(hitPos, t.color, 20);
+
+    switch (t.type) {
+        case TargetType::VolUp: m_volume = qMin(100, m_volume + 10); break;
+        case TargetType::VolDown: m_volume = qMax(0, m_volume - 10); break;
+        case TargetType::Fullscreen: 
+            m_fullscreen = !m_fullscreen; 
+            emit fullscreenToggled(m_fullscreen); 
+            break;
+        case TargetType::ThemeNeon: m_currentTheme = "Cyber Neon"; triggerEMP(t.pos); break;
+        case TargetType::ThemeArcade: m_currentTheme = "Retro Arcade"; triggerEMP(t.pos); break;
+        case TargetType::EMP: triggerEMP(t.pos); break;
+        case TargetType::BackToMenu: emit backClicked(); break;
+        case TargetType::ProMode: emit proModeClicked(); break;   
+    }
+}
+
+void SettingsWidget::triggerEMP(const QPointF& center) {
+    m_empActive = true;
+    m_empRadius = 0.0;
+    for (auto& t : m_targets) {
+        qreal dx = t.pos.x() - center.x();
+        qreal dy = t.pos.y() - center.y();
+        qreal dist = std::sqrt(dx*dx + dy*dy);
+        if (dist > 0.1) {
+            t.velocity.setX(t.velocity.x() + (dx / dist) * 25.0); 
+            t.velocity.setY(t.velocity.y() + (dy / dist) * 25.0);
+        }
+    }
+}
+
+void SettingsWidget::spawnParticles(const QPointF& pos, const QColor& color, int count) {
+    for (int i = 0; i < count; ++i) {
+        Particle part;
+        part.pos = pos;
+        qreal angle = (QRandomGenerator::global()->bounded(360)) * M_PI / 180.0;
+        qreal speed = (QRandomGenerator::global()->bounded(40, 100)) / 10.0;
+        part.velocity = QPointF(std::cos(angle) * speed, std::sin(angle) * speed);
+        part.life = 1.0;
+        part.color = color;
+        m_particles.append(part);
+    }
+}
+
+void SettingsWidget::mouseMoveEvent(QMouseEvent* event) {
+    m_mousePos = event->position();
+    qreal dx = m_mousePos.x() - (width() / 2.0);
+    qreal dy = m_mousePos.y() - (height() - 40.0);
+    m_cannonAngle = std::atan2(dy, dx);
+}
+
+void SettingsWidget::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        Projectile p;
+        p.pos = QPointF(width() / 2.0, height() - 40.0);
+        qreal speed = 35.0; 
+        p.velocity = QPointF(std::cos(m_cannonAngle) * speed, std::sin(m_cannonAngle) * speed);
+        m_projectiles.append(p);
+        spawnParticles(p.pos, QColor(0, 242, 254), 3); // جرقه لوله شلیک
+    }
+}
+
+void SettingsWidget::resizeEvent(QResizeEvent* event) {
+    if (m_firstShow && width() > 100) {
+        scatterTargets(); // انفجار اولیه هنگام باز شدن صفحه!
+        m_firstShow = false;
+    }
+    QWidget::resizeEvent(event);
+}
+
+void SettingsWidget::paintEvent(QPaintEvent* event) {
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // ۱. پس‌زمینه
+    QLinearGradient bgGrad(0, 0, 0, height());
+    if (m_currentTheme == "Cyber Neon") {
+        bgGrad.setColorAt(0.0, QColor(6, 9, 15)); bgGrad.setColorAt(1.0, QColor(2, 3, 5));
+    } else {
+        bgGrad.setColorAt(0.0, QColor(20, 5, 10)); bgGrad.setColorAt(1.0, QColor(5, 1, 2));
+    }
+    painter.fillRect(rect(), bgGrad);
+
+    // ۲. موج انفجار
+    if (m_empActive) {
+        painter.setPen(QPen(QColor(0, 242, 254, qMax(0, 150 - int(m_empRadius / 15.0))), 6));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QPointF(width()/2, height()/2), m_empRadius, m_empRadius);
+    }
+
+    // ۳. رابط هولوگرامی بالا (HUD)
+    painter.setPen(QPen(QColor(255, 255, 255, 30), 1));
+    painter.drawRect(20, 20, width() - 40, 60);
+    
+    painter.setPen(QColor(0, 242, 254, 200));
+    painter.setFont(QFont("Arial", 14, QFont::Bold));
+    QString statusText = QString("SYSTEM OVERRIDE | VOL: %1% | DISPLAY: %2 | THEME: %3")
+                         .arg(m_volume)
+                         .arg(m_fullscreen ? "FULLSCREEN" : "WINDOWED")
+                         .arg(m_currentTheme.toUpper());
+    painter.drawText(QRect(0, 20, width(), 60), Qt::AlignCenter, statusText);
+
+    // ۴. رسم حباب‌ها (هولوگرامی شیشه‌ای)
+    for (const auto& t : m_targets) {
+        qreal currentRadius = t.radius * t.hitScale;
+        
+        // حلقه بیرونی درخشان
+        painter.setPen(QPen(t.color, 3));
+        painter.setBrush(QColor(t.color.red(), t.color.green(), t.color.blue(), 40));
+        painter.drawEllipse(t.pos, currentRadius, currentRadius);
+        
+        // هسته شیشه‌ای داخلی
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 255, 255, 15));
+        painter.drawEllipse(t.pos, currentRadius * 0.8, currentRadius * 0.8);
+
+        // سایه متن برای خوانایی
+        painter.setPen(QColor(0, 0, 0, 150));
+        painter.setFont(QFont("Arial", 10, QFont::Black));
+        painter.drawText(QRectF(t.pos.x() - currentRadius + 2, t.pos.y() - currentRadius + 2, currentRadius*2, currentRadius*2), Qt::AlignCenter, t.label);
+        
+        // متن اصلی
+        painter.setPen(Qt::white);
+        painter.drawText(QRectF(t.pos.x() - currentRadius, t.pos.y() - currentRadius, currentRadius*2, currentRadius*2), Qt::AlignCenter, t.label);
+    }
+
+    // ۵. خط نشانه‌گیر لیزری (Laser Sight)
+    painter.setPen(QPen(QColor(0, 242, 254, 80), 2, Qt::DashLine));
+    painter.drawLine(QPointF(width() / 2.0, height() - 40.0), m_mousePos);
+
+    // ۶. رسم گلوله‌های لیزری (Motion Blur effect)
+    painter.setPen(QPen(QColor(0, 242, 254), 4, Qt::SolidLine, Qt::RoundCap));
+    for (const auto& p : m_projectiles) {
+        painter.drawLine(p.pos, p.pos - (p.velocity * 1.5));
+    }
+
+    // ۷. رسم ذرات
+    for (const auto& part : m_particles) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(part.color.red(), part.color.green(), part.color.blue(), int(part.life * 255)));
+        painter.drawEllipse(part.pos, 4, 4);
+    }
+
+    // ۸. توپخانه سایبرپانک
+    painter.save();
+    painter.translate(width() / 2.0, height() - 40.0);
+    painter.rotate(qRadiansToDegrees(m_cannonAngle));
+    
+    // لوله توپ
+    painter.setBrush(QColor(15, 20, 30));
+    painter.setPen(QPen(QColor(0, 242, 254), 3));
+    painter.drawRect(0, -12, 50, 24);
+    
+    // بدنه چرخشی
+    painter.setBrush(QColor(30, 40, 60));
+    painter.drawEllipse(QPointF(0, 0), 25, 25);
+    // هسته نئونی
+    painter.setBrush(QColor(0, 242, 254));
+    painter.drawEllipse(QPointF(0, 0), 10, 10);
+    
+    painter.restore();
+}
+
+================================================================================
+📄 FILE: ./src/ui/MainMenuWidget.cpp
+================================================================================
+#include "MainMenuWidget.h"
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QPainter>
+#include <QRandomGenerator>
+#include <QMouseEvent>
+#include <QGraphicsDropShadowEffect>
+#include <QFrame>
+#include <cmath>
+
+MainMenuWidget::MainMenuWidget(QWidget* parent) : QWidget(parent) {
+    setMouseTracking(true); 
+    setupUI();
+    initBalls();
+    initBubbles();
+
+    m_animTimer = new QTimer(this);
+    connect(m_animTimer, &QTimer::timeout, this, &MainMenuWidget::updateAnimation);
+    m_animTimer->start(16);
+}
+
+void MainMenuWidget::initBalls() {
+    m_balls.clear();
+    QVector<QColor> colors = {
+        QColor(255, 51, 102), QColor(0, 204, 255), 
+        QColor(51, 255, 153), QColor(255, 204, 0), 
+        QColor(153, 51, 255)
+    };
+
+    for (int i = 0; i < 40; ++i) { 
+        MenuBall ball;
+        ball.color = colors[i % colors.size()];
+        
+        if (i < 15) {
+            ball.isBackground = false;
+            ball.radius = QRandomGenerator::global()->bounded(25, 50);
+        } else {
+            ball.isBackground = true;
+            ball.radius = QRandomGenerator::global()->bounded(8, 20);
+        }
+        
+        // محاسبه جرم بر اساس مساحت توپ
+        ball.mass = ball.radius * ball.radius; 
+        m_balls.append(ball);
+    }
+    
+    // شلیک اولیه (با فرض ابعاد حدودی 800x600)
+    resetBallsToCorners(800, 600);
+}
+
+void MainMenuWidget::resetBallsToCorners(int w, int h) {
+    if (w <= 0 || h <= 0) return;
+    
+    for (int i = 0; i < m_balls.size(); ++i) {
+        int corner = i % 4;
+        qreal startX = (corner == 0 || corner == 2) ? -50 : w + 50;
+        qreal startY = (corner == 0 || corner == 1) ? -50 : h + 50;
+        
+        m_balls[i].pos = QPointF(startX + QRandomGenerator::global()->bounded(50), 
+                                 startY + QRandomGenerator::global()->bounded(50));
+        
+        // شلیک به سمت مرکز صفحه
+        qreal vx = (startX < 0) ? (QRandomGenerator::global()->bounded(300, 700) / 100.0) : -(QRandomGenerator::global()->bounded(300, 700) / 100.0);
+        qreal vy = (startY < 0) ? (QRandomGenerator::global()->bounded(300, 700) / 100.0) : -(QRandomGenerator::global()->bounded(300, 700) / 100.0);
+        
+        m_balls[i].velocity = QPointF(vx, vy);
+    }
+}
+
+void MainMenuWidget::initBubbles() {
+    m_bubbles.clear();
+    for(int i = 0; i < 60; ++i) {
+        GasBubble b;
+        b.pos = QPointF(QRandomGenerator::global()->bounded(2000), QRandomGenerator::global()->bounded(1500));
+        b.speed = (QRandomGenerator::global()->bounded(20) + 15) / 100.0; 
+        b.size = QRandomGenerator::global()->bounded(2, 5); 
+        b.wobblePhase = QRandomGenerator::global()->bounded(314) / 100.0;
+        m_bubbles.append(b);
+    }
+}
+
+void MainMenuWidget::setupUI() {
+    auto mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(40, 30, 40, 40);
+
+    // نوار وضعیت
+    auto topLayout = new QHBoxLayout();
+    auto versionLabel = new QLabel("v1.3.0 | Physics Edition", this);
+    versionLabel->setStyleSheet("color: rgba(255, 255, 255, 100); font-size: 13px; font-weight: bold; background: transparent;");
+    
+    auto hudLabel = new QLabel("👤 PLAYER 1   |   🏆 BEST: 12,400   |   🪙 350", this);
+    hudLabel->setStyleSheet("background: rgba(15, 23, 42, 0.7); color: #00F2FE; padding: 10px 20px; border-radius: 12px; border: 1px solid rgba(0, 242, 254, 0.3); font-weight: bold; font-size: 14px;");
+    
+    topLayout->addWidget(versionLabel);
+    topLayout->addStretch();
+    topLayout->addWidget(hudLabel);
+    mainLayout->addLayout(topLayout);
+
+    mainLayout->addStretch(1);
+
+    // عنوان بازی (دینامیک)
+    m_titleLabel = new QLabel("CYBER BOUNCE", this);
+    m_titleLabel->setAlignment(Qt::AlignCenter);
+    m_titleLabel->setMinimumSize(0, 0); 
+    
+    auto shadow = new QGraphicsDropShadowEffect(this);
+    shadow->setBlurRadius(25);
+    shadow->setColor(QColor(0, 242, 254, 120)); 
+    shadow->setOffset(0, 0);
+    m_titleLabel->setGraphicsEffect(shadow);
+    
+    mainLayout->addWidget(m_titleLabel);
+    mainLayout->addStretch(1);
+
+    // دکمه‌ها
+    auto bottomLayout = new QHBoxLayout();
+    auto glassPanel = new QFrame(this);
+    glassPanel->setStyleSheet("QFrame { background: rgba(15, 23, 42, 0.65); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 20px; }");
+    
+    m_buttonsLayout = new QBoxLayout(QBoxLayout::LeftToRight, glassPanel);
+    m_buttonsLayout->setContentsMargins(30, 20, 30, 20);
+    m_buttonsLayout->setSpacing(20);
+    m_buttonsLayout->setAlignment(Qt::AlignCenter);
+
+    QString btnStyle = R"(
+        QPushButton {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 25px; 
+            font-size: 18px; 
+            font-weight: bold;
+            color: #E2E8F0; 
+            min-width: 150px;
+        }
+        QPushButton:hover {
+            background: rgba(0, 242, 254, 0.15);
+            border: 1px solid #00F2FE;
+            color: #00F2FE; 
+        }
+    )";
+    QString playStyle = btnStyle + "QPushButton { border: 1px solid rgba(0, 242, 254, 0.5); background: rgba(0, 242, 254, 0.1); color: #00F2FE; font-size: 20px; }";
+
+    auto settingsBtn = new QPushButton("⚙ Settings", glassPanel);
+    settingsBtn->setStyleSheet(btnStyle);
+    connect(settingsBtn, &QPushButton::clicked, this, &MainMenuWidget::settingsClicked);
+
+    auto startBtn = new QPushButton("🎮 PLAY GAME", glassPanel);
+    startBtn->setStyleSheet(playStyle);
+    connect(startBtn, &QPushButton::clicked, this, &MainMenuWidget::startGameClicked);
+
+    auto scoreBtn = new QPushButton("🏆 Leaderboard", glassPanel);
+    scoreBtn->setStyleSheet(btnStyle);
+    connect(scoreBtn, &QPushButton::clicked, this, &MainMenuWidget::scoreboardClicked);
+
+    auto exitBtn = new QPushButton("✖ Exit", glassPanel);
+    exitBtn->setStyleSheet(btnStyle);
+    connect(exitBtn, &QPushButton::clicked, this, &MainMenuWidget::exitClicked);
+
+    m_buttonsLayout->addWidget(settingsBtn);
+    m_buttonsLayout->addWidget(startBtn);
+    m_buttonsLayout->addWidget(scoreBtn);
+    m_buttonsLayout->addWidget(exitBtn);
+
+    bottomLayout->addStretch();
+    bottomLayout->addWidget(glassPanel);
+    bottomLayout->addStretch();
+
+    mainLayout->addLayout(bottomLayout);
+}
+
+void MainMenuWidget::resizeEvent(QResizeEvent* event) {
+    int w = event->size().width();
+    int h = event->size().height();
+
+    // تنظیم سایز فونت به صورت کاملاً پویا بر اساس عرض صفحه
+    int fontSize = qBound(35, w / 15, 100);
+    m_titleLabel->setStyleSheet(QString("QLabel { background: transparent; color: #FFFFFF; font-size: %1px; font-weight: 900; letter-spacing: 8px; }").arg(fontSize));
+
+    if (w < 850) {
+        m_buttonsLayout->setDirection(QBoxLayout::TopToBottom);
+    } else {
+        m_buttonsLayout->setDirection(QBoxLayout::LeftToRight);
+    }
+    
+    // شلیک مجدد توپ‌ها از گوشه‌ها هنگام تغییر سایز پنجره
+    resetBallsToCorners(w, h);
+    
+    QWidget::resizeEvent(event);
+}
+
+void MainMenuWidget::mouseMoveEvent(QMouseEvent* event) {
+    m_mousePos = event->position();
+    QWidget::mouseMoveEvent(event);
+}
+
+void MainMenuWidget::updateAnimation() {
+    m_time += 0.05;
+
+    // ۱. آپدیت حباب‌های گاز
+    for (auto& b : m_bubbles) {
+        b.pos.setY(b.pos.y() - b.speed);
+        b.pos.setX(b.pos.x() + std::sin(m_time + b.wobblePhase) * 0.4); 
+        if (b.pos.y() < -10) {
+            b.pos.setY(std::max(1000, height()) + 10);
+            b.pos.setX(QRandomGenerator::global()->bounded(std::max(1, width())));
+        }
+    }
+
+    // ۲. فیزیک برخورد توپ‌ها با یکدیگر (Elastic Collision)
+    for (int i = 0; i < m_balls.size(); ++i) {
+        for (int j = i + 1; j < m_balls.size(); ++j) {
+            MenuBall& b1 = m_balls[i];
+            MenuBall& b2 = m_balls[j];
+
+            // فقط توپ‌های هم‌لایه با هم برخورد کنند
+            if (b1.isBackground != b2.isBackground) continue;
+
+            qreal dx = b2.pos.x() - b1.pos.x();
+            qreal dy = b2.pos.y() - b1.pos.y();
+            qreal dist = std::sqrt(dx*dx + dy*dy);
+            qreal minDist = b1.radius + b2.radius;
+
+            if (dist < minDist && dist > 0) {
+                // رفع همپوشانی (جلوگیری از گیر کردن توپ‌ها در هم)
+                qreal overlap = 0.5 * (minDist - dist);
+                qreal nx = dx / dist;
+                qreal ny = dy / dist;
+                b1.pos.setX(b1.pos.x() - nx * overlap);
+                b1.pos.setY(b1.pos.y() - ny * overlap);
+                b2.pos.setX(b2.pos.x() + nx * overlap);
+                b2.pos.setY(b2.pos.y() + ny * overlap);
+
+                // محاسبه سرعت‌های جدید بر اساس تکانه و وزن
+                qreal kx = b1.velocity.x() - b2.velocity.x();
+                qreal ky = b1.velocity.y() - b2.velocity.y();
+                qreal p = 2.0 * (nx * kx + ny * ky) / (b1.mass + b2.mass);
+
+                b1.velocity.setX(b1.velocity.x() - p * b2.mass * nx);
+                b1.velocity.setY(b1.velocity.y() - p * b2.mass * ny);
+                b2.velocity.setX(b2.velocity.x() + p * b1.mass * nx);
+                b2.velocity.setY(b2.velocity.y() + p * b1.mass * ny);
+            }
+        }
+    }
+
+    // ۳. آپدیت موقعیت و دافعه موس
+    for (auto& ball : m_balls) {
+        qreal dx = ball.pos.x() - m_mousePos.x();
+        qreal dy = ball.pos.y() - m_mousePos.y();
+        qreal dist = std::sqrt(dx*dx + dy*dy);
+        
+        qreal repelRadius = ball.isBackground ? 100.0 : 200.0;
+        
+        if (dist < repelRadius && dist > 0) {
+            qreal force = (repelRadius - dist) / repelRadius;
+            qreal multiplier = ball.isBackground ? 1.0 : 2.0;
+            ball.velocity.setX(ball.velocity.x() + (dx / dist) * force * multiplier);
+            ball.velocity.setY(ball.velocity.y() + (dy / dist) * force * multiplier);
+        }
+
+        ball.velocity.setX(ball.velocity.x() * 0.99); // اصطکاک ملایم‌تر
+        ball.velocity.setY(ball.velocity.y() * 0.99);
+
+        if (std::abs(ball.velocity.x()) < 0.2) ball.velocity.setX(ball.velocity.x() > 0 ? 0.2 : -0.2);
+        if (std::abs(ball.velocity.y()) < 0.2) ball.velocity.setY(ball.velocity.y() > 0 ? 0.2 : -0.2);
+
+        ball.pos += ball.velocity;
+
+        if (ball.pos.x() - ball.radius < 0) { ball.pos.setX(ball.radius); ball.velocity.setX(std::abs(ball.velocity.x())); }
+        else if (ball.pos.x() + ball.radius > width()) { ball.pos.setX(width() - ball.radius); ball.velocity.setX(-std::abs(ball.velocity.x())); }
+
+        if (ball.pos.y() - ball.radius < 0) { ball.pos.setY(ball.radius); ball.velocity.setY(std::abs(ball.velocity.y())); }
+        else if (ball.pos.y() + ball.radius > height()) { ball.pos.setY(height() - ball.radius); ball.velocity.setY(-std::abs(ball.velocity.y())); }
+    }
+    
+    update(); 
+}
+
+void MainMenuWidget::paintEvent(QPaintEvent* event) {
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    QLinearGradient bgGrad(0, 0, 0, height());
+    bgGrad.setColorAt(0.0, QColor(8, 12, 22)); 
+    bgGrad.setColorAt(1.0, QColor(2, 4, 8));   
+    painter.fillRect(rect(), bgGrad);
+
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 255, 255, 30)); 
+    for (const auto& b : m_bubbles) {
+        painter.drawEllipse(b.pos, b.size, b.size);
+    }
+
+    for (const auto& ball : m_balls) {
+        QRadialGradient ballGrad(ball.pos.x() - ball.radius * 0.3, ball.pos.y() - ball.radius * 0.3, ball.radius * 1.2);
+        
+        if (ball.isBackground) {
+            ballGrad.setColorAt(0.0, QColor(ball.color.red(), ball.color.green(), ball.color.blue(), 100));
+            ballGrad.setColorAt(1.0, QColor(ball.color.red(), ball.color.green(), ball.color.blue(), 20));
+        } else {
+            ballGrad.setColorAt(0.0, QColor(255, 255, 255, 255)); 
+            ballGrad.setColorAt(0.3, QColor(ball.color.red(), ball.color.green(), ball.color.blue(), 220));
+            ballGrad.setColorAt(1.0, QColor(ball.color.red(), ball.color.green(), ball.color.blue(), 60)); 
+        }
+
+        painter.setBrush(ballGrad);
+        painter.drawEllipse(ball.pos, ball.radius, ball.radius);
+    }
+}
+
+================================================================================
+📄 FILE: ./src/ui/waterbackgroundwidget.cpp
+================================================================================
+#include "waterbackgroundwidget.h"
+
+#include <QMouseEvent>
+#include <QSurfaceFormat>
+#include <QDebug>
+#include <QtMath>
+
+namespace {
+
+constexpr int kTargetFPS = 60;
+
+// Embedded so the widget has zero external resource dependencies.
+// Identical copies live in shaders/water.vert and shaders/water.frag for
+// easy editing in a real shader IDE -- keep both in sync if you change one.
+
+const char *kVertexShaderSrc = R"GLSL(
+#version 330 core
+layout(location = 0) in vec2 aPosition;
+layout(location = 1) in vec2 aTexCoord;
+out vec2 vUV;
+void main()
+{
+    vUV = aTexCoord;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+}
+)GLSL";
+
+const char *kFragmentShaderSrc = R"GLSL(
+#version 330 core
+
+in vec2 vUV;
+out vec4 fragColor;
+
+uniform float uTime;
+uniform vec2  uResolution;
+
+uniform vec2  uMouse;
+uniform vec2  uMouseVelocity;
+
+#define MAX_TRAIL 24
+uniform vec4  uTrail[MAX_TRAIL];
+uniform int   uTrailCount;
+
+const vec3 DEEP_COLOR    = vec3(0.02, 0.10, 0.20);
+const vec3 SHALLOW_COLOR = vec3(0.05, 0.34, 0.55);
+const vec3 CAUSTIC_COLOR = vec3(0.65, 0.95, 1.0);
+const vec3 FOAM_COLOR    = vec3(0.85, 0.98, 1.0);
+
+vec2 hash2(vec2 p)
+{
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return fract(sin(p) * 43758.5453123);
+}
+
+float voronoi(vec2 uv)
+{
+    vec2 ip = floor(uv);
+    vec2 fp = fract(uv);
+    float minDist = 8.0;
+
+    for (int y = -1; y <= 1; y++)
+    for (int x = -1; x <= 1; x++)
+    {
+        vec2 neighbor = vec2(float(x), float(y));
+        vec2 jitter = hash2(ip + neighbor);
+        jitter = 0.5 + 0.45 * sin(uTime * 0.35 + 6.2831853 * jitter);
+        vec2 diff = neighbor + jitter - fp;
+        minDist = min(minDist, dot(diff, diff));
+    }
+    return sqrt(minDist);
+}
+
+float causticLayer(vec2 uv, float scale, float speed, float warp)
+{
+    vec2 p = uv * scale;
+    p += vec2(uTime * speed, -uTime * speed * 0.6);
+    p += warp * vec2(sin(p.y * 1.3 + uTime * 0.5), cos(p.x * 1.3 - uTime * 0.4));
+
+    float d = voronoi(p);
+    float cell = 1.0 - smoothstep(0.0, 0.35, d);
+    return pow(cell, 3.0);
+}
+
+float segmentDist(vec2 p, vec2 a, vec2 b)
+{
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-5), 0.0, 1.0);
+    return length(pa - ba * h);
+}
+
+void main()
+{
+    vec2 uv = vUV;
+    float aspect = uResolution.x / max(uResolution.y, 1.0);
+    vec2 auv = vec2(uv.x * aspect, uv.y);
+
+    float partDist = 1e6;
+    float wakeAge   = 1e6;
+    vec2 prevPoint = auv;
+
+    for (int i = 0; i < uTrailCount; i++)
+    {
+        vec4 s = uTrail[i];
+        vec2 p = vec2(s.x * aspect, s.y);
+        if (i > 0)
+        {
+            float d = segmentDist(auv, prevPoint, p);
+            if (d < partDist) { partDist = d; wakeAge = s.z; }
+        }
+        prevPoint = p;
+    }
+
+    vec2 mouseAUV = vec2(uMouse.x * aspect, uMouse.y);
+    vec2 rel = auv - mouseAUV;
+    float speed = length(uMouseVelocity);
+    vec2 velDir = speed > 1e-4 ? normalize(uMouseVelocity) : vec2(1.0, 0.0);
+
+    float along  = dot(rel, vec2(velDir.x * aspect, velDir.y));
+    float across = dot(rel, vec2(-velDir.y * aspect, velDir.x));
+    float stretch = 1.0 + clamp(speed * 6.0, 0.0, 2.5);
+    float cursorDist = length(vec2(along / stretch, across));
+
+    if (cursorDist < partDist) { partDist = cursorDist; wakeAge = 0.0; }
+
+    float maxRadius = 0.045 + 0.05 * clamp(speed * 4.0, 0.0, 1.0);
+    float closeTime = 0.9;
+    float radius = (uTrailCount > 0)
+        ? maxRadius * (1.0 - clamp(wakeAge / closeTime, 0.0, 1.0))
+        : 0.0;
+
+    float parting = (radius > 1e-4) ? smoothstep(radius * 0.35, radius, partDist) : 1.0;
+
+    vec2 pushDir = (length(rel) > 1e-4) ? normalize(rel) : vec2(0.0);
+    float pushAmount = (1.0 - parting) * 0.05;
+    vec2 displacedUV = uv + vec2(pushDir.x / aspect, pushDir.y) * pushAmount;
+
+    float c1 = causticLayer(displacedUV, 6.0, 0.06, 0.35);
+    float c2 = causticLayer(displacedUV * 1.7 + 5.2, 10.0, -0.09, 0.5);
+    float caustics = clamp(c1 * 0.7 + c2 * 0.5, 0.0, 1.0);
+
+    float h = sin(displacedUV.x * 12.0 + uTime * 0.8) * 0.02
+            + sin(displacedUV.y * 9.0  - uTime * 0.6) * 0.02;
+    float depthMix = clamp(0.5 + h * 4.0, 0.0, 1.0);
+
+    vec3 water = mix(DEEP_COLOR, SHALLOW_COLOR, depthMix);
+    water += CAUSTIC_COLOR * caustics * 0.55;
+
+    float rim = smoothstep(radius, radius * 0.6, partDist)
+              - smoothstep(radius * 0.6, radius * 0.2, partDist);
+    water += FOAM_COLOR * clamp(rim, 0.0, 1.0) * 0.8;
+
+    float alpha = parting;
+    fragColor = vec4(water * alpha, alpha);
+}
+)GLSL";
+
+} // namespace
+
+WaterBackgroundWidget::WaterBackgroundWidget(QWidget *parent)
+    : QOpenGLWidget(parent)
+{
+    // Alpha buffer is mandatory: this is what lets the widget report a
+    // real alpha channel that Qt composites against whatever is stacked
+    // underneath it (rather than always being opaque).
+    QSurfaceFormat format;
+    format.setRenderableType(QSurfaceFormat::OpenGL);
+    format.setVersion(3, 3);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setAlphaBufferSize(8);
+    format.setSamples(4);       // MSAA smooths the caustic cell edges
+    format.setSwapInterval(1);  // vsync -> effectively caps us at the display refresh
+    setFormat(format);
+
+    setAttribute(Qt::WA_NoSystemBackground);
+    setMouseTracking(true); // so we get move events without a button held
+
+    m_clock.start();
+    m_mouseDeltaTimer.start();
+
+    connect(&m_frameTimer, &QTimer::timeout, this, [this] { update(); });
+    m_frameTimer.start(1000 / kTargetFPS);
+}
+
+WaterBackgroundWidget::~WaterBackgroundWidget()
+{
+    makeCurrent();
+    delete m_program;
+    m_vbo.destroy();
+    m_vao.destroy();
+    doneCurrent();
+}
+
+void WaterBackgroundWidget::initializeGL()
+{
+    initializeOpenGLFunctions();
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glEnable(GL_BLEND);
+    // The fragment shader outputs premultiplied color, so this is the
+    // correct blend func to composite cleanly against the widget below us.
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+    setupShaders();
+    setupGeometry();
+}
+
+void WaterBackgroundWidget::setupShaders()
+{
+    m_program = new QOpenGLShaderProgram(this);
+
+    if (!m_program->addShaderFromSourceCode(QOpenGLShader::Vertex, kVertexShaderSrc))
+        qWarning() << "[Water] vertex shader compile error:" << m_program->log();
+
+    if (!m_program->addShaderFromSourceCode(QOpenGLShader::Fragment, kFragmentShaderSrc))
+        qWarning() << "[Water] fragment shader compile error:" << m_program->log();
+
+    if (!m_program->link())
+        qWarning() << "[Water] shader link error:" << m_program->log();
+
+    m_uTimeLoc         = m_program->uniformLocation("uTime");
+    m_uResolutionLoc    = m_program->uniformLocation("uResolution");
+    m_uMouseLoc         = m_program->uniformLocation("uMouse");
+    m_uMouseVelocityLoc = m_program->uniformLocation("uMouseVelocity");
+    m_uTrailLoc         = m_program->uniformLocation("uTrail[0]");
+    m_uTrailCountLoc    = m_program->uniformLocation("uTrailCount");
+}
+
+void WaterBackgroundWidget::setupGeometry()
+{
+    // Fullscreen quad as a triangle strip: (x, y, u, v) per vertex.
+    static const GLfloat quad[] = {
+        -1.f, -1.f,  0.f, 0.f,
+         1.f, -1.f,  1.f, 0.f,
+        -1.f,  1.f,  0.f, 1.f,
+         1.f,  1.f,  1.f, 1.f,
+    };
+
+    m_vao.create();
+    m_vao.bind();
+
+    m_vbo.create();
+    m_vbo.bind();
+    m_vbo.allocate(quad, sizeof(quad));
+
+    m_program->bind();
+    m_program->enableAttributeArray(0);
+    m_program->setAttributeBuffer(0, GL_FLOAT, 0, 2, 4 * sizeof(GLfloat));
+    m_program->enableAttributeArray(1);
+    m_program->setAttributeBuffer(1, GL_FLOAT, 2 * sizeof(GLfloat), 2, 4 * sizeof(GLfloat));
+    m_program->release();
+
+    m_vbo.release();
+    m_vao.release();
+}
+
+void WaterBackgroundWidget::resizeGL(int w, int h)
+{
+    glViewport(0, 0, w, h);
+}
+
+QVector2D WaterBackgroundWidget::toUV(const QPointF &widgetPos) const
+{
+    float x = float(widgetPos.x() / qMax(1, width()));
+    float y = 1.0f - float(widgetPos.y() / qMax(1, height())); // GL UV is y-up
+    return QVector2D(x, y);
+}
+
+void WaterBackgroundWidget::pushTrailPoint(const QPointF &widgetPos)
+{
+    const float now = m_clock.elapsed() / 1000.0f;
+    QVector2D uv = toUV(widgetPos);
+    float speed = 0.0f;
+
+    if (m_hasLastMouse)
+    {
+        QVector2D prevUV = toUV(m_lastMousePos);
+        float dt = qMax(0.0001f, m_mouseDeltaTimer.restart() / 1000.0f);
+        speed = (uv - prevUV).length() / dt;
+    }
+    else
+    {
+        m_mouseDeltaTimer.restart();
+    }
+
+    m_currentMouseUV = uv;
+    // Smooth the velocity slightly so tiny per-event jitter doesn't make
+    // the elongated cursor blob flicker in direction.
+    QVector2D instVelocity = m_hasLastMouse
+        ? (uv - toUV(m_lastMousePos)) * (1.0f / qMax(0.0001f, m_mouseDeltaTimer.elapsed() / 1000.0f))
+        : QVector2D(0, 0);
+    m_currentVelocity = m_currentVelocity * 0.6f + instVelocity * 0.4f;
+
+    m_trail.push_back({uv, now, speed});
+    while (m_trail.size() > kMaxTrail)
+        m_trail.pop_front();
+
+    m_lastMousePos = widgetPos;
+    m_hasLastMouse = true;
+}
+
+void WaterBackgroundWidget::mouseMoveEvent(QMouseEvent *event)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    pushTrailPoint(event->position());
+#else
+    pushTrailPoint(event->localPos());
+#endif
+    QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void WaterBackgroundWidget::leaveEvent(QEvent *event)
+{
+    m_hasLastMouse = false;
+    m_currentVelocity = QVector2D(0.0f, 0.0f);
+    QOpenGLWidget::leaveEvent(event);
+}
+
+void WaterBackgroundWidget::paintGL()
+{
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    m_program->bind();
+    m_vao.bind();
+
+    const float t = m_clock.elapsed() / 1000.0f;
+    m_program->setUniformValue(m_uTimeLoc, t);
+    m_program->setUniformValue(m_uResolutionLoc, QVector2D(float(width()), float(height())));
+    m_program->setUniformValue(m_uMouseLoc, m_currentMouseUV);
+    m_program->setUniformValue(m_uMouseVelocityLoc, m_currentVelocity);
+
+    // Decay velocity smoothly when the mouse has stopped moving so the
+    // elongated "swipe" shape relaxes back into a circle instead of
+    // freezing mid-stretch.
+    m_currentVelocity *= 0.90f;
+
+    // Drop trail samples older than the shader's close time so the wake
+    // fully heals and doesn't leave the array full of stale points.
+    while (!m_trail.empty() && (t - m_trail.front().capturedAt) > 1.2f)
+        m_trail.pop_front();
+
+    QVector<QVector4D> trailData;
+    trailData.reserve(kMaxTrail);
+    for (const auto &tp : m_trail)
+        trailData.append(QVector4D(tp.uv.x(), tp.uv.y(), t - tp.capturedAt, tp.speed));
+    while (trailData.size() < kMaxTrail)
+        trailData.append(QVector4D(0.0f, 0.0f, 999.0f, 0.0f));
+
+    m_program->setUniformValueArray(m_uTrailLoc, trailData.constData(), trailData.size());
+    m_program->setUniformValue(m_uTrailCountLoc, int(m_trail.size()));
+
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    m_vao.release();
+    m_program->release();
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/PauseDialog.cpp
+================================================================================
+#include "PauseDialog.h"
+#include <QVBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+
+PauseDialog::PauseDialog(QWidget* parent) : QDialog(parent) {
+    setWindowTitle("Paused");
+    setModal(true);
+    setStyleSheet("background-color: #2c3e50; color: white;");
+
+    auto layout = new QVBoxLayout(this);
+    layout->setSpacing(15);
+
+    auto label = new QLabel("Game Paused", this);
+    label->setStyleSheet("font-size: 20px; font-weight: bold; color: #f1c40f;");
+    layout->addWidget(label, 0, Qt::AlignCenter);
+
+    auto resumeBtn = new QPushButton("Resume", this);
+    resumeBtn->setStyleSheet("background-color: #27ae60; color: white; padding: 10px; font-weight: bold; border-radius: 6px;");
+    connect(resumeBtn, &QPushButton::clicked, this, [this]() {
+        emit resumeGame();
+        accept();
+    });
+    layout->addWidget(resumeBtn);
+
+    auto exitBtn = new QPushButton("Exit to Menu", this);
+    exitBtn->setStyleSheet("background-color: #c0392b; color: white; padding: 10px; font-weight: bold; border-radius: 6px;");
+    connect(exitBtn, &QPushButton::clicked, this, [this]() {
+        emit exitToMenu();
+        accept();
+    });
+    layout->addWidget(exitBtn);
+}
+
+
+================================================================================
+📄 FILE: ./src/ui/MainWindow.h
+================================================================================
+#pragma once
+#include <QMainWindow>
+#include <QStackedWidget>
+#include <QKeyEvent>
+#include "../core/ScoreManager.h"
+#include "../gameplay/GameScene.h"
+#include "../gameplay/GameView.h"
+#include "MainMenuWidget.h"
+#include "StartGameWidget.h"
+#include "SettingsWidget.h"
+#include "ScoreboardWidget.h"
+
+class MainWindow : public QMainWindow {
+    Q_OBJECT
+public:
+    explicit MainWindow(QWidget* parent = nullptr);
+
+protected:
+    void keyPressEvent(QKeyEvent* event) override;
+
+private slots:
+    void startNewGame(const QString& username, const QString& mode);
+    void handleGameOver(int score);
+    void handleGameWon(int score);
+    void showPauseMenu();
+    void returnToMainMenu();
+
+private:
+    QStackedWidget* m_stackedWidget;
+    MainMenuWidget* m_mainMenu;
+    StartGameWidget* m_startMenu;
+    SettingsWidget* m_settingsWidget;
+    ScoreboardWidget* m_scoreboardWidget;
+
+    GameView* m_gameView = nullptr;
+    GameScene* m_gameScene = nullptr;
+    ScoreManager m_scoreManager;
+
+    QString m_currentUser;
+    QString m_currentMode;
+
+};
+
+================================================================================
+📄 FILE: ./src/ui/waterbackgroundwidget.h
+================================================================================
+#pragma once
+
+#include <QOpenGLWidget>
+#include <QOpenGLFunctions_3_3_Core>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLBuffer>
+#include <QOpenGLVertexArrayObject>
+#include <QElapsedTimer>
+#include <QTimer>
+#include <QVector2D>
+#include <QVector4D>
+#include <deque>
+
+/**
+ * WaterBackgroundWidget
+ * ---------------------
+ * A fully GPU-driven, transparent-capable QOpenGLWidget that renders an
+ * animated pool-water surface (procedural Voronoi caustics) and reacts to
+ * the mouse by "parting" the water -- the area under the cursor's recent
+ * path becomes transparent, revealing whatever is stacked underneath it
+ * in the widget hierarchy (e.g. a PoolBallsWidget).
+ *
+ * Requires an alpha-enabled QSurfaceFormat (set in the constructor) and,
+ * on the *parent* side, correct z-ordering -- see MainMenuWidget for the
+ * Qt::WA_AlwaysStackOnTop note on the button overlay.
+ */
+class WaterBackgroundWidget : public QOpenGLWidget, protected QOpenGLFunctions_3_3_Core
+{
+    Q_OBJECT
+
+public:
+    explicit WaterBackgroundWidget(QWidget *parent = nullptr);
+    ~WaterBackgroundWidget() override;
+
+protected:
+    void initializeGL() override;
+    void resizeGL(int w, int h) override;
+    void paintGL() override;
+
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+
+private:
+    struct TrailPoint
+    {
+        QVector2D uv;      // cursor position in UV space (0..1, y-up) at capture time
+        float capturedAt;  // seconds (from m_clock) when this sample was taken
+        float speed;       // instantaneous speed at capture, UV units / second
+    };
+
+    void setupGeometry();
+    void setupShaders();
+    void pushTrailPoint(const QPointF &widgetPos);
+    QVector2D toUV(const QPointF &widgetPos) const;
+
+    QOpenGLShaderProgram *m_program = nullptr;
+    QOpenGLBuffer m_vbo{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject m_vao;
+
+    QElapsedTimer m_clock;          // master animation clock (uTime)
+    QElapsedTimer m_mouseDeltaTimer; // used to compute instantaneous mouse speed
+    QTimer m_frameTimer;             // drives ~60 FPS repaint
+
+    QPointF m_lastMousePos;
+    bool m_hasLastMouse = false;
+
+    QVector2D m_currentMouseUV{0.5f, 0.5f};
+    QVector2D m_currentVelocity{0.0f, 0.0f};
+
+    static constexpr int kMaxTrail = 24;
+    std::deque<TrailPoint> m_trail;
+
+    int m_uTimeLoc = -1;
+    int m_uResolutionLoc = -1;
+    int m_uMouseLoc = -1;
+    int m_uMouseVelocityLoc = -1;
+    int m_uTrailLoc = -1;
+    int m_uTrailCountLoc = -1;
+};
+
+
+================================================================================
+📄 FILE: ./src/ui/SettingsWidget.h
+================================================================================
+#pragma once
+#include <QWidget>
+#include <QTimer>
+#include <QPointF>
+#include <QVector>
+#include <QColor>
+#include <QString>
+
+enum class TargetType { 
+    VolUp, VolDown, Fullscreen, ThemeNeon, ThemeArcade, EMP, BackToMenu, ProMode // <--- ProMode اضافه شد
+};
+
+
+void proModeClicked(); // <--- سیگنال جدید
+
+struct SettingTarget {
+    QPointF pos;
+    QPointF velocity;
+    qreal radius;
+    QColor color;
+    QString label;
+    TargetType type;
+    qreal hitScale = 1.0; 
+};
+
+struct Projectile {
+    QPointF pos;
+    QPointF velocity;
+    bool active = true;
+};
+
+struct Particle {
+    QPointF pos;
+    QPointF velocity;
+    qreal life; 
+    QColor color;
+};
+
+class SettingsWidget : public QWidget {
+    Q_OBJECT
+public:
+    explicit SettingsWidget(QWidget* parent = nullptr);
+
+    signals:
+        void backClicked();
+    void fullscreenToggled(bool enabled);
+    void proModeClicked(); // <--- سیگنال جدید
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private slots:
+    void gameLoop();
+
+private:
+    void initTargets();
+    void scatterTargets(); // برای پخش کردن حباب‌ها در شروع
+    void triggerHitEffect(int targetIndex, const QPointF& hitPos);
+    void triggerEMP(const QPointF& center);
+    void spawnParticles(const QPointF& pos, const QColor& color, int count);
+    void keepTargetsInBounds();
+    void applyTargetRepulsion(); // جلوگیری از روی هم افتادن
+
+    QTimer* m_timer;
+    QVector<SettingTarget> m_targets;
+    QVector<Projectile> m_projectiles;
+    QVector<Particle> m_particles;
+
+    QPointF m_mousePos;
+    qreal m_cannonAngle = 0.0;
+    bool m_firstShow = true;
+    
+    int m_volume = 80;
+    bool m_fullscreen = false;
+    QString m_currentTheme = "Cyber Neon";
+    
+    qreal m_empRadius = 0.0;
+    bool m_empActive = false;
+};
+
+================================================================================
+📄 FILE: ./src/ui/ThemeManager.h
+================================================================================
+#pragma once
+#include <QString>
+
+class ThemeManager {
+public:
+    static QString getMasterStyleSheet() {
+        return R"(
+            QWidget {
+                background-color: #0F172A;
+                color: #F8FAFC;
+                font-family: 'Segoe UI', 'Ubuntu', sans-serif;
+                font-size: 14px;
+            }
+
+            /* Neon Glass Card / Group Box */
+            QFrame#cardFrame {
+                background-color: #1E293B;
+                border: 1px solid #334155;
+                border-radius: 16px;
+            }
+
+            /* Buttons */
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #0284C7, stop:1 #0369A1);
+                color: #FFFFFF;
+                font-size: 15px;
+                font-weight: bold;
+                padding: 12px 24px;
+                border: 1px solid #38BDF8;
+                border-radius: 12px;
+                min-width: 160px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #38BDF8, stop:1 #0284C7);
+                border: 2px solid #E0F2FE;
+            }
+            QPushButton:pressed {
+                background-color: #0C4A6E;
+            }
+            QPushButton#dangerBtn {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #DC2626, stop:1 #991B1B);
+                border: 1px solid #F87171;
+            }
+            QPushButton#dangerBtn:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #EF4444, stop:1 #DC2626);
+                border: 2px solid #FEE2E2;
+            }
+
+            /* Input Fields */
+            QLineEdit {
+                background-color: #1E293B;
+                color: #38BDF8;
+                border: 2px solid #334155;
+                border-radius: 10px;
+                padding: 10px 14px;
+                font-size: 15px;
+                font-weight: bold;
+            }
+            QLineEdit:focus {
+                border: 2px solid #38BDF8;
+                background-color: #0F172A;
+            }
+
+            /* ComboBox */
+            QComboBox {
+                background-color: #1E293B;
+                border: 2px solid #334155;
+                border-radius: 10px;
+                padding: 8px 16px;
+                color: #F8FAFC;
+                font-weight: bold;
+            }
+            QComboBox:hover {
+                border: 2px solid #38BDF8;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #1E293B;
+                border: 1px solid #38BDF8;
+                selection-background-color: #0284C7;
+                color: #FFFFFF;
+            }
+
+            /* Sliders */
+            QSlider::groove:horizontal {
+                height: 8px;
+                background: #334155;
+                border-radius: 4px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #38BDF8;
+                border-radius: 4px;
+            }
+            QSlider::handle:horizontal {
+                background: #FFFFFF;
+                border: 2px solid #38BDF8;
+                width: 20px;
+                margin-top: -6px;
+                margin-bottom: -6px;
+                border-radius: 10px;
+            }
+
+            /* Table Widget */
+            QTableWidget {
+                background-color: #1E293B;
+                border: 1px solid #334155;
+                border-radius: 12px;
+                gridline-color: #334155;
+                color: #F8FAFC;
+            }
+            QHeaderView::section {
+                background-color: #0F172A;
+                color: #38BDF8;
+                font-weight: bold;
+                padding: 8px;
+                border: none;
+                border-bottom: 2px solid #38BDF8;
+            }
+        )";
+    }
+};
+
+================================================================================
+📄 FILE: ./build/Desktop-Debug/CMakeFiles/3.31.6/CompilerIdCXX/CMakeCXXCompilerId.cpp
+================================================================================
+/* This source file must have a .cpp extension so that all C++ compilers
+   recognize the extension without flags.  Borland does not know .cxx for
+   example.  */
+#ifndef __cplusplus
+# error "A C compiler has been selected for C++."
+#endif
+
+#if !defined(__has_include)
+/* If the compiler does not have __has_include, pretend the answer is
+   always no.  */
+#  define __has_include(x) 0
+#endif
+
+
+/* Version number components: V=Version, R=Revision, P=Patch
+   Version date components:   YYYY=Year, MM=Month,   DD=Day  */
+
+#if defined(__INTEL_COMPILER) || defined(__ICC)
+# define COMPILER_ID "Intel"
+# if defined(_MSC_VER)
+#  define SIMULATE_ID "MSVC"
+# endif
+# if defined(__GNUC__)
+#  define SIMULATE_ID "GNU"
+# endif
+  /* __INTEL_COMPILER = VRP prior to 2021, and then VVVV for 2021 and later,
+     except that a few beta releases use the old format with V=2021.  */
+# if __INTEL_COMPILER < 2021 || __INTEL_COMPILER == 202110 || __INTEL_COMPILER == 202111
+#  define COMPILER_VERSION_MAJOR DEC(__INTEL_COMPILER/100)
+#  define COMPILER_VERSION_MINOR DEC(__INTEL_COMPILER/10 % 10)
+#  if defined(__INTEL_COMPILER_UPDATE)
+#   define COMPILER_VERSION_PATCH DEC(__INTEL_COMPILER_UPDATE)
+#  else
+#   define COMPILER_VERSION_PATCH DEC(__INTEL_COMPILER   % 10)
+#  endif
+# else
+#  define COMPILER_VERSION_MAJOR DEC(__INTEL_COMPILER)
+#  define COMPILER_VERSION_MINOR DEC(__INTEL_COMPILER_UPDATE)
+   /* The third version component from --version is an update index,
+      but no macro is provided for it.  */
+#  define COMPILER_VERSION_PATCH DEC(0)
+# endif
+# if defined(__INTEL_COMPILER_BUILD_DATE)
+   /* __INTEL_COMPILER_BUILD_DATE = YYYYMMDD */
+#  define COMPILER_VERSION_TWEAK DEC(__INTEL_COMPILER_BUILD_DATE)
+# endif
+# if defined(_MSC_VER)
+   /* _MSC_VER = VVRR */
+#  define SIMULATE_VERSION_MAJOR DEC(_MSC_VER / 100)
+#  define SIMULATE_VERSION_MINOR DEC(_MSC_VER % 100)
+# endif
+# if defined(__GNUC__)
+#  define SIMULATE_VERSION_MAJOR DEC(__GNUC__)
+# elif defined(__GNUG__)
+#  define SIMULATE_VERSION_MAJOR DEC(__GNUG__)
+# endif
+# if defined(__GNUC_MINOR__)
+#  define SIMULATE_VERSION_MINOR DEC(__GNUC_MINOR__)
+# endif
+# if defined(__GNUC_PATCHLEVEL__)
+#  define SIMULATE_VERSION_PATCH DEC(__GNUC_PATCHLEVEL__)
+# endif
+
+#elif (defined(__clang__) && defined(__INTEL_CLANG_COMPILER)) || defined(__INTEL_LLVM_COMPILER)
+# define COMPILER_ID "IntelLLVM"
+#if defined(_MSC_VER)
+# define SIMULATE_ID "MSVC"
+#endif
+#if defined(__GNUC__)
+# define SIMULATE_ID "GNU"
+#endif
+/* __INTEL_LLVM_COMPILER = VVVVRP prior to 2021.2.0, VVVVRRPP for 2021.2.0 and
+ * later.  Look for 6 digit vs. 8 digit version number to decide encoding.
+ * VVVV is no smaller than the current year when a version is released.
+ */
+#if __INTEL_LLVM_COMPILER < 1000000L
+# define COMPILER_VERSION_MAJOR DEC(__INTEL_LLVM_COMPILER/100)
+# define COMPILER_VERSION_MINOR DEC(__INTEL_LLVM_COMPILER/10 % 10)
+# define COMPILER_VERSION_PATCH DEC(__INTEL_LLVM_COMPILER    % 10)
+#else
+# define COMPILER_VERSION_MAJOR DEC(__INTEL_LLVM_COMPILER/10000)
+# define COMPILER_VERSION_MINOR DEC(__INTEL_LLVM_COMPILER/100 % 100)
+# define COMPILER_VERSION_PATCH DEC(__INTEL_LLVM_COMPILER     % 100)
+#endif
+#if defined(_MSC_VER)
+  /* _MSC_VER = VVRR */
+# define SIMULATE_VERSION_MAJOR DEC(_MSC_VER / 100)
+# define SIMULATE_VERSION_MINOR DEC(_MSC_VER % 100)
+#endif
+#if defined(__GNUC__)
+# define SIMULATE_VERSION_MAJOR DEC(__GNUC__)
+#elif defined(__GNUG__)
+# define SIMULATE_VERSION_MAJOR DEC(__GNUG__)
+#endif
+#if defined(__GNUC_MINOR__)
+# define SIMULATE_VERSION_MINOR DEC(__GNUC_MINOR__)
+#endif
+#if defined(__GNUC_PATCHLEVEL__)
+# define SIMULATE_VERSION_PATCH DEC(__GNUC_PATCHLEVEL__)
+#endif
+
+#elif defined(__PATHCC__)
+# define COMPILER_ID "PathScale"
+# define COMPILER_VERSION_MAJOR DEC(__PATHCC__)
+# define COMPILER_VERSION_MINOR DEC(__PATHCC_MINOR__)
+# if defined(__PATHCC_PATCHLEVEL__)
+#  define COMPILER_VERSION_PATCH DEC(__PATHCC_PATCHLEVEL__)
+# endif
+
+#elif defined(__BORLANDC__) && defined(__CODEGEARC_VERSION__)
+# define COMPILER_ID "Embarcadero"
+# define COMPILER_VERSION_MAJOR HEX(__CODEGEARC_VERSION__>>24 & 0x00FF)
+# define COMPILER_VERSION_MINOR HEX(__CODEGEARC_VERSION__>>16 & 0x00FF)
+# define COMPILER_VERSION_PATCH DEC(__CODEGEARC_VERSION__     & 0xFFFF)
+
+#elif defined(__BORLANDC__)
+# define COMPILER_ID "Borland"
+  /* __BORLANDC__ = 0xVRR */
+# define COMPILER_VERSION_MAJOR HEX(__BORLANDC__>>8)
+# define COMPILER_VERSION_MINOR HEX(__BORLANDC__ & 0xFF)
+
+#elif defined(__WATCOMC__) && __WATCOMC__ < 1200
+# define COMPILER_ID "Watcom"
+   /* __WATCOMC__ = VVRR */
+# define COMPILER_VERSION_MAJOR DEC(__WATCOMC__ / 100)
+# define COMPILER_VERSION_MINOR DEC((__WATCOMC__ / 10) % 10)
+# if (__WATCOMC__ % 10) > 0
+#  define COMPILER_VERSION_PATCH DEC(__WATCOMC__ % 10)
+# endif
+
+#elif defined(__WATCOMC__)
+# define COMPILER_ID "OpenWatcom"
+   /* __WATCOMC__ = VVRP + 1100 */
+# define COMPILER_VERSION_MAJOR DEC((__WATCOMC__ - 1100) / 100)
+# define COMPILER_VERSION_MINOR DEC((__WATCOMC__ / 10) % 10)
+# if (__WATCOMC__ % 10) > 0
+#  define COMPILER_VERSION_PATCH DEC(__WATCOMC__ % 10)
+# endif
+
+#elif defined(__SUNPRO_CC)
+# define COMPILER_ID "SunPro"
+# if __SUNPRO_CC >= 0x5100
+   /* __SUNPRO_CC = 0xVRRP */
+#  define COMPILER_VERSION_MAJOR HEX(__SUNPRO_CC>>12)
+#  define COMPILER_VERSION_MINOR HEX(__SUNPRO_CC>>4 & 0xFF)
+#  define COMPILER_VERSION_PATCH HEX(__SUNPRO_CC    & 0xF)
+# else
+   /* __SUNPRO_CC = 0xVRP */
+#  define COMPILER_VERSION_MAJOR HEX(__SUNPRO_CC>>8)
+#  define COMPILER_VERSION_MINOR HEX(__SUNPRO_CC>>4 & 0xF)
+#  define COMPILER_VERSION_PATCH HEX(__SUNPRO_CC    & 0xF)
+# endif
+
+#elif defined(__HP_aCC)
+# define COMPILER_ID "HP"
+  /* __HP_aCC = VVRRPP */
+# define COMPILER_VERSION_MAJOR DEC(__HP_aCC/10000)
+# define COMPILER_VERSION_MINOR DEC(__HP_aCC/100 % 100)
+# define COMPILER_VERSION_PATCH DEC(__HP_aCC     % 100)
+
+#elif defined(__DECCXX)
+# define COMPILER_ID "Compaq"
+  /* __DECCXX_VER = VVRRTPPPP */
+# define COMPILER_VERSION_MAJOR DEC(__DECCXX_VER/10000000)
+# define COMPILER_VERSION_MINOR DEC(__DECCXX_VER/100000  % 100)
+# define COMPILER_VERSION_PATCH DEC(__DECCXX_VER         % 10000)
+
+#elif defined(__IBMCPP__) && defined(__COMPILER_VER__)
+# define COMPILER_ID "zOS"
+  /* __IBMCPP__ = VRP */
+# define COMPILER_VERSION_MAJOR DEC(__IBMCPP__/100)
+# define COMPILER_VERSION_MINOR DEC(__IBMCPP__/10 % 10)
+# define COMPILER_VERSION_PATCH DEC(__IBMCPP__    % 10)
+
+#elif defined(__open_xl__) && defined(__clang__)
+# define COMPILER_ID "IBMClang"
+# define COMPILER_VERSION_MAJOR DEC(__open_xl_version__)
+# define COMPILER_VERSION_MINOR DEC(__open_xl_release__)
+# define COMPILER_VERSION_PATCH DEC(__open_xl_modification__)
+# define COMPILER_VERSION_TWEAK DEC(__open_xl_ptf_fix_level__)
+
+
+#elif defined(__ibmxl__) && defined(__clang__)
+# define COMPILER_ID "XLClang"
+# define COMPILER_VERSION_MAJOR DEC(__ibmxl_version__)
+# define COMPILER_VERSION_MINOR DEC(__ibmxl_release__)
+# define COMPILER_VERSION_PATCH DEC(__ibmxl_modification__)
+# define COMPILER_VERSION_TWEAK DEC(__ibmxl_ptf_fix_level__)
+
+
+#elif defined(__IBMCPP__) && !defined(__COMPILER_VER__) && __IBMCPP__ >= 800
+# define COMPILER_ID "XL"
+  /* __IBMCPP__ = VRP */
+# define COMPILER_VERSION_MAJOR DEC(__IBMCPP__/100)
+# define COMPILER_VERSION_MINOR DEC(__IBMCPP__/10 % 10)
+# define COMPILER_VERSION_PATCH DEC(__IBMCPP__    % 10)
+
+#elif defined(__IBMCPP__) && !defined(__COMPILER_VER__) && __IBMCPP__ < 800
+# define COMPILER_ID "VisualAge"
+  /* __IBMCPP__ = VRP */
+# define COMPILER_VERSION_MAJOR DEC(__IBMCPP__/100)
+# define COMPILER_VERSION_MINOR DEC(__IBMCPP__/10 % 10)
+# define COMPILER_VERSION_PATCH DEC(__IBMCPP__    % 10)
+
+#elif defined(__NVCOMPILER)
+# define COMPILER_ID "NVHPC"
+# define COMPILER_VERSION_MAJOR DEC(__NVCOMPILER_MAJOR__)
+# define COMPILER_VERSION_MINOR DEC(__NVCOMPILER_MINOR__)
+# if defined(__NVCOMPILER_PATCHLEVEL__)
+#  define COMPILER_VERSION_PATCH DEC(__NVCOMPILER_PATCHLEVEL__)
+# endif
+
+#elif defined(__PGI)
+# define COMPILER_ID "PGI"
+# define COMPILER_VERSION_MAJOR DEC(__PGIC__)
+# define COMPILER_VERSION_MINOR DEC(__PGIC_MINOR__)
+# if defined(__PGIC_PATCHLEVEL__)
+#  define COMPILER_VERSION_PATCH DEC(__PGIC_PATCHLEVEL__)
+# endif
+
+#elif defined(__clang__) && defined(__cray__)
+# define COMPILER_ID "CrayClang"
+# define COMPILER_VERSION_MAJOR DEC(__cray_major__)
+# define COMPILER_VERSION_MINOR DEC(__cray_minor__)
+# define COMPILER_VERSION_PATCH DEC(__cray_patchlevel__)
+# define COMPILER_VERSION_INTERNAL_STR __clang_version__
+
+
+#elif defined(_CRAYC)
+# define COMPILER_ID "Cray"
+# define COMPILER_VERSION_MAJOR DEC(_RELEASE_MAJOR)
+# define COMPILER_VERSION_MINOR DEC(_RELEASE_MINOR)
+
+#elif defined(__TI_COMPILER_VERSION__)
+# define COMPILER_ID "TI"
+  /* __TI_COMPILER_VERSION__ = VVVRRRPPP */
+# define COMPILER_VERSION_MAJOR DEC(__TI_COMPILER_VERSION__/1000000)
+# define COMPILER_VERSION_MINOR DEC(__TI_COMPILER_VERSION__/1000   % 1000)
+# define COMPILER_VERSION_PATCH DEC(__TI_COMPILER_VERSION__        % 1000)
+
+#elif defined(__CLANG_FUJITSU)
+# define COMPILER_ID "FujitsuClang"
+# define COMPILER_VERSION_MAJOR DEC(__FCC_major__)
+# define COMPILER_VERSION_MINOR DEC(__FCC_minor__)
+# define COMPILER_VERSION_PATCH DEC(__FCC_patchlevel__)
+# define COMPILER_VERSION_INTERNAL_STR __clang_version__
+
+
+#elif defined(__FUJITSU)
+# define COMPILER_ID "Fujitsu"
+# if defined(__FCC_version__)
+#   define COMPILER_VERSION __FCC_version__
+# elif defined(__FCC_major__)
+#   define COMPILER_VERSION_MAJOR DEC(__FCC_major__)
+#   define COMPILER_VERSION_MINOR DEC(__FCC_minor__)
+#   define COMPILER_VERSION_PATCH DEC(__FCC_patchlevel__)
+# endif
+# if defined(__fcc_version)
+#   define COMPILER_VERSION_INTERNAL DEC(__fcc_version)
+# elif defined(__FCC_VERSION)
+#   define COMPILER_VERSION_INTERNAL DEC(__FCC_VERSION)
+# endif
+
+
+#elif defined(__ghs__)
+# define COMPILER_ID "GHS"
+/* __GHS_VERSION_NUMBER = VVVVRP */
+# ifdef __GHS_VERSION_NUMBER
+# define COMPILER_VERSION_MAJOR DEC(__GHS_VERSION_NUMBER / 100)
+# define COMPILER_VERSION_MINOR DEC(__GHS_VERSION_NUMBER / 10 % 10)
+# define COMPILER_VERSION_PATCH DEC(__GHS_VERSION_NUMBER      % 10)
+# endif
+
+#elif defined(__TASKING__)
+# define COMPILER_ID "Tasking"
+  # define COMPILER_VERSION_MAJOR DEC(__VERSION__/1000)
+  # define COMPILER_VERSION_MINOR DEC(__VERSION__ % 100)
+# define COMPILER_VERSION_INTERNAL DEC(__VERSION__)
+
+#elif defined(__ORANGEC__)
+# define COMPILER_ID "OrangeC"
+# define COMPILER_VERSION_MAJOR DEC(__ORANGEC_MAJOR__)
+# define COMPILER_VERSION_MINOR DEC(__ORANGEC_MINOR__)
+# define COMPILER_VERSION_PATCH DEC(__ORANGEC_PATCHLEVEL__)
+
+#elif defined(__SCO_VERSION__)
+# define COMPILER_ID "SCO"
+
+#elif defined(__ARMCC_VERSION) && !defined(__clang__)
+# define COMPILER_ID "ARMCC"
+#if __ARMCC_VERSION >= 1000000
+  /* __ARMCC_VERSION = VRRPPPP */
+  # define COMPILER_VERSION_MAJOR DEC(__ARMCC_VERSION/1000000)
+  # define COMPILER_VERSION_MINOR DEC(__ARMCC_VERSION/10000 % 100)
+  # define COMPILER_VERSION_PATCH DEC(__ARMCC_VERSION     % 10000)
+#else
+  /* __ARMCC_VERSION = VRPPPP */
+  # define COMPILER_VERSION_MAJOR DEC(__ARMCC_VERSION/100000)
+  # define COMPILER_VERSION_MINOR DEC(__ARMCC_VERSION/10000 % 10)
+  # define COMPILER_VERSION_PATCH DEC(__ARMCC_VERSION    % 10000)
+#endif
+
+
+#elif defined(__clang__) && defined(__apple_build_version__)
+# define COMPILER_ID "AppleClang"
+# if defined(_MSC_VER)
+#  define SIMULATE_ID "MSVC"
+# endif
+# define COMPILER_VERSION_MAJOR DEC(__clang_major__)
+# define COMPILER_VERSION_MINOR DEC(__clang_minor__)
+# define COMPILER_VERSION_PATCH DEC(__clang_patchlevel__)
+# if defined(_MSC_VER)
+   /* _MSC_VER = VVRR */
+#  define SIMULATE_VERSION_MAJOR DEC(_MSC_VER / 100)
+#  define SIMULATE_VERSION_MINOR DEC(_MSC_VER % 100)
+# endif
+# define COMPILER_VERSION_TWEAK DEC(__apple_build_version__)
+
+#elif defined(__clang__) && defined(__ARMCOMPILER_VERSION)
+# define COMPILER_ID "ARMClang"
+  # define COMPILER_VERSION_MAJOR DEC(__ARMCOMPILER_VERSION/1000000)
+  # define COMPILER_VERSION_MINOR DEC(__ARMCOMPILER_VERSION/10000 % 100)
+  # define COMPILER_VERSION_PATCH DEC(__ARMCOMPILER_VERSION/100   % 100)
+# define COMPILER_VERSION_INTERNAL DEC(__ARMCOMPILER_VERSION)
+
+#elif defined(__clang__) && defined(__ti__)
+# define COMPILER_ID "TIClang"
+  # define COMPILER_VERSION_MAJOR DEC(__ti_major__)
+  # define COMPILER_VERSION_MINOR DEC(__ti_minor__)
+  # define COMPILER_VERSION_PATCH DEC(__ti_patchlevel__)
+# define COMPILER_VERSION_INTERNAL DEC(__ti_version__)
+
+#elif defined(__clang__)
+# define COMPILER_ID "Clang"
+# if defined(_MSC_VER)
+#  define SIMULATE_ID "MSVC"
+# endif
+# define COMPILER_VERSION_MAJOR DEC(__clang_major__)
+# define COMPILER_VERSION_MINOR DEC(__clang_minor__)
+# define COMPILER_VERSION_PATCH DEC(__clang_patchlevel__)
+# if defined(_MSC_VER)
+   /* _MSC_VER = VVRR */
+#  define SIMULATE_VERSION_MAJOR DEC(_MSC_VER / 100)
+#  define SIMULATE_VERSION_MINOR DEC(_MSC_VER % 100)
+# endif
+
+#elif defined(__LCC__) && (defined(__GNUC__) || defined(__GNUG__) || defined(__MCST__))
+# define COMPILER_ID "LCC"
+# define COMPILER_VERSION_MAJOR DEC(__LCC__ / 100)
+# define COMPILER_VERSION_MINOR DEC(__LCC__ % 100)
+# if defined(__LCC_MINOR__)
+#  define COMPILER_VERSION_PATCH DEC(__LCC_MINOR__)
+# endif
+# if defined(__GNUC__) && defined(__GNUC_MINOR__)
+#  define SIMULATE_ID "GNU"
+#  define SIMULATE_VERSION_MAJOR DEC(__GNUC__)
+#  define SIMULATE_VERSION_MINOR DEC(__GNUC_MINOR__)
+#  if defined(__GNUC_PATCHLEVEL__)
+#   define SIMULATE_VERSION_PATCH DEC(__GNUC_PATCHLEVEL__)
+#  endif
+# endif
+
+#elif defined(__GNUC__) || defined(__GNUG__)
+# define COMPILER_ID "GNU"
+# if defined(__GNUC__)
+#  define COMPILER_VERSION_MAJOR DEC(__GNUC__)
+# else
+#  define COMPILER_VERSION_MAJOR DEC(__GNUG__)
+# endif
+# if defined(__GNUC_MINOR__)
+#  define COMPILER_VERSION_MINOR DEC(__GNUC_MINOR__)
+# endif
+# if defined(__GNUC_PATCHLEVEL__)
+#  define COMPILER_VERSION_PATCH DEC(__GNUC_PATCHLEVEL__)
+# endif
+
+#elif defined(_MSC_VER)
+# define COMPILER_ID "MSVC"
+  /* _MSC_VER = VVRR */
+# define COMPILER_VERSION_MAJOR DEC(_MSC_VER / 100)
+# define COMPILER_VERSION_MINOR DEC(_MSC_VER % 100)
+# if defined(_MSC_FULL_VER)
+#  if _MSC_VER >= 1400
+    /* _MSC_FULL_VER = VVRRPPPPP */
+#   define COMPILER_VERSION_PATCH DEC(_MSC_FULL_VER % 100000)
+#  else
+    /* _MSC_FULL_VER = VVRRPPPP */
+#   define COMPILER_VERSION_PATCH DEC(_MSC_FULL_VER % 10000)
+#  endif
+# endif
+# if defined(_MSC_BUILD)
+#  define COMPILER_VERSION_TWEAK DEC(_MSC_BUILD)
+# endif
+
+#elif defined(_ADI_COMPILER)
+# define COMPILER_ID "ADSP"
+#if defined(__VERSIONNUM__)
+  /* __VERSIONNUM__ = 0xVVRRPPTT */
+#  define COMPILER_VERSION_MAJOR DEC(__VERSIONNUM__ >> 24 & 0xFF)
+#  define COMPILER_VERSION_MINOR DEC(__VERSIONNUM__ >> 16 & 0xFF)
+#  define COMPILER_VERSION_PATCH DEC(__VERSIONNUM__ >> 8 & 0xFF)
+#  define COMPILER_VERSION_TWEAK DEC(__VERSIONNUM__ & 0xFF)
+#endif
+
+#elif defined(__IAR_SYSTEMS_ICC__) || defined(__IAR_SYSTEMS_ICC)
+# define COMPILER_ID "IAR"
+# if defined(__VER__) && defined(__ICCARM__)
+#  define COMPILER_VERSION_MAJOR DEC((__VER__) / 1000000)
+#  define COMPILER_VERSION_MINOR DEC(((__VER__) / 1000) % 1000)
+#  define COMPILER_VERSION_PATCH DEC((__VER__) % 1000)
+#  define COMPILER_VERSION_INTERNAL DEC(__IAR_SYSTEMS_ICC__)
+# elif defined(__VER__) && (defined(__ICCAVR__) || defined(__ICCRX__) || defined(__ICCRH850__) || defined(__ICCRL78__) || defined(__ICC430__) || defined(__ICCRISCV__) || defined(__ICCV850__) || defined(__ICC8051__) || defined(__ICCSTM8__))
+#  define COMPILER_VERSION_MAJOR DEC((__VER__) / 100)
+#  define COMPILER_VERSION_MINOR DEC((__VER__) - (((__VER__) / 100)*100))
+#  define COMPILER_VERSION_PATCH DEC(__SUBVERSION__)
+#  define COMPILER_VERSION_INTERNAL DEC(__IAR_SYSTEMS_ICC__)
+# endif
+
+
+/* These compilers are either not known or too old to define an
+  identification macro.  Try to identify the platform and guess that
+  it is the native compiler.  */
+#elif defined(__hpux) || defined(__hpua)
+# define COMPILER_ID "HP"
+
+#else /* unknown compiler */
+# define COMPILER_ID ""
+#endif
+
+/* Construct the string literal in pieces to prevent the source from
+   getting matched.  Store it in a pointer rather than an array
+   because some compilers will just produce instructions to fill the
+   array rather than assigning a pointer to a static array.  */
+char const* info_compiler = "INFO" ":" "compiler[" COMPILER_ID "]";
+#ifdef SIMULATE_ID
+char const* info_simulate = "INFO" ":" "simulate[" SIMULATE_ID "]";
+#endif
+
+#ifdef __QNXNTO__
+char const* qnxnto = "INFO" ":" "qnxnto[]";
+#endif
+
+#if defined(__CRAYXT_COMPUTE_LINUX_TARGET)
+char const *info_cray = "INFO" ":" "compiler_wrapper[CrayPrgEnv]";
+#endif
+
+#define STRINGIFY_HELPER(X) #X
+#define STRINGIFY(X) STRINGIFY_HELPER(X)
+
+/* Identify known platforms by name.  */
+#if defined(__linux) || defined(__linux__) || defined(linux)
+# define PLATFORM_ID "Linux"
+
+#elif defined(__MSYS__)
+# define PLATFORM_ID "MSYS"
+
+#elif defined(__CYGWIN__)
+# define PLATFORM_ID "Cygwin"
+
+#elif defined(__MINGW32__)
+# define PLATFORM_ID "MinGW"
+
+#elif defined(__APPLE__)
+# define PLATFORM_ID "Darwin"
+
+#elif defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+# define PLATFORM_ID "Windows"
+
+#elif defined(__FreeBSD__) || defined(__FreeBSD)
+# define PLATFORM_ID "FreeBSD"
+
+#elif defined(__NetBSD__) || defined(__NetBSD)
+# define PLATFORM_ID "NetBSD"
+
+#elif defined(__OpenBSD__) || defined(__OPENBSD)
+# define PLATFORM_ID "OpenBSD"
+
+#elif defined(__sun) || defined(sun)
+# define PLATFORM_ID "SunOS"
+
+#elif defined(_AIX) || defined(__AIX) || defined(__AIX__) || defined(__aix) || defined(__aix__)
+# define PLATFORM_ID "AIX"
+
+#elif defined(__hpux) || defined(__hpux__)
+# define PLATFORM_ID "HP-UX"
+
+#elif defined(__HAIKU__)
+# define PLATFORM_ID "Haiku"
+
+#elif defined(__BeOS) || defined(__BEOS__) || defined(_BEOS)
+# define PLATFORM_ID "BeOS"
+
+#elif defined(__QNX__) || defined(__QNXNTO__)
+# define PLATFORM_ID "QNX"
+
+#elif defined(__tru64) || defined(_tru64) || defined(__TRU64__)
+# define PLATFORM_ID "Tru64"
+
+#elif defined(__riscos) || defined(__riscos__)
+# define PLATFORM_ID "RISCos"
+
+#elif defined(__sinix) || defined(__sinix__) || defined(__SINIX__)
+# define PLATFORM_ID "SINIX"
+
+#elif defined(__UNIX_SV__)
+# define PLATFORM_ID "UNIX_SV"
+
+#elif defined(__bsdos__)
+# define PLATFORM_ID "BSDOS"
+
+#elif defined(_MPRAS) || defined(MPRAS)
+# define PLATFORM_ID "MP-RAS"
+
+#elif defined(__osf) || defined(__osf__)
+# define PLATFORM_ID "OSF1"
+
+#elif defined(_SCO_SV) || defined(SCO_SV) || defined(sco_sv)
+# define PLATFORM_ID "SCO_SV"
+
+#elif defined(__ultrix) || defined(__ultrix__) || defined(_ULTRIX)
+# define PLATFORM_ID "ULTRIX"
+
+#elif defined(__XENIX__) || defined(_XENIX) || defined(XENIX)
+# define PLATFORM_ID "Xenix"
+
+#elif defined(__WATCOMC__)
+# if defined(__LINUX__)
+#  define PLATFORM_ID "Linux"
+
+# elif defined(__DOS__)
+#  define PLATFORM_ID "DOS"
+
+# elif defined(__OS2__)
+#  define PLATFORM_ID "OS2"
+
+# elif defined(__WINDOWS__)
+#  define PLATFORM_ID "Windows3x"
+
+# elif defined(__VXWORKS__)
+#  define PLATFORM_ID "VxWorks"
+
+# else /* unknown platform */
+#  define PLATFORM_ID
+# endif
+
+#elif defined(__INTEGRITY)
+# if defined(INT_178B)
+#  define PLATFORM_ID "Integrity178"
+
+# else /* regular Integrity */
+#  define PLATFORM_ID "Integrity"
+# endif
+
+# elif defined(_ADI_COMPILER)
+#  define PLATFORM_ID "ADSP"
+
+#else /* unknown platform */
+# define PLATFORM_ID
+
+#endif
+
+/* For windows compilers MSVC and Intel we can determine
+   the architecture of the compiler being used.  This is because
+   the compilers do not have flags that can change the architecture,
+   but rather depend on which compiler is being used
+*/
+#if defined(_WIN32) && defined(_MSC_VER)
+# if defined(_M_IA64)
+#  define ARCHITECTURE_ID "IA64"
+
+# elif defined(_M_ARM64EC)
+#  define ARCHITECTURE_ID "ARM64EC"
+
+# elif defined(_M_X64) || defined(_M_AMD64)
+#  define ARCHITECTURE_ID "x64"
+
+# elif defined(_M_IX86)
+#  define ARCHITECTURE_ID "X86"
+
+# elif defined(_M_ARM64)
+#  define ARCHITECTURE_ID "ARM64"
+
+# elif defined(_M_ARM)
+#  if _M_ARM == 4
+#   define ARCHITECTURE_ID "ARMV4I"
+#  elif _M_ARM == 5
+#   define ARCHITECTURE_ID "ARMV5I"
+#  else
+#   define ARCHITECTURE_ID "ARMV" STRINGIFY(_M_ARM)
+#  endif
+
+# elif defined(_M_MIPS)
+#  define ARCHITECTURE_ID "MIPS"
+
+# elif defined(_M_SH)
+#  define ARCHITECTURE_ID "SHx"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+#elif defined(__WATCOMC__)
+# if defined(_M_I86)
+#  define ARCHITECTURE_ID "I86"
+
+# elif defined(_M_IX86)
+#  define ARCHITECTURE_ID "X86"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+#elif defined(__IAR_SYSTEMS_ICC__) || defined(__IAR_SYSTEMS_ICC)
+# if defined(__ICCARM__)
+#  define ARCHITECTURE_ID "ARM"
+
+# elif defined(__ICCRX__)
+#  define ARCHITECTURE_ID "RX"
+
+# elif defined(__ICCRH850__)
+#  define ARCHITECTURE_ID "RH850"
+
+# elif defined(__ICCRL78__)
+#  define ARCHITECTURE_ID "RL78"
+
+# elif defined(__ICCRISCV__)
+#  define ARCHITECTURE_ID "RISCV"
+
+# elif defined(__ICCAVR__)
+#  define ARCHITECTURE_ID "AVR"
+
+# elif defined(__ICC430__)
+#  define ARCHITECTURE_ID "MSP430"
+
+# elif defined(__ICCV850__)
+#  define ARCHITECTURE_ID "V850"
+
+# elif defined(__ICC8051__)
+#  define ARCHITECTURE_ID "8051"
+
+# elif defined(__ICCSTM8__)
+#  define ARCHITECTURE_ID "STM8"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+#elif defined(__ghs__)
+# if defined(__PPC64__)
+#  define ARCHITECTURE_ID "PPC64"
+
+# elif defined(__ppc__)
+#  define ARCHITECTURE_ID "PPC"
+
+# elif defined(__ARM__)
+#  define ARCHITECTURE_ID "ARM"
+
+# elif defined(__x86_64__)
+#  define ARCHITECTURE_ID "x64"
+
+# elif defined(__i386__)
+#  define ARCHITECTURE_ID "X86"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+#elif defined(__clang__) && defined(__ti__)
+# if defined(__ARM_ARCH)
+#  define ARCHITECTURE_ID "ARM"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+#elif defined(__TI_COMPILER_VERSION__)
+# if defined(__TI_ARM__)
+#  define ARCHITECTURE_ID "ARM"
+
+# elif defined(__MSP430__)
+#  define ARCHITECTURE_ID "MSP430"
+
+# elif defined(__TMS320C28XX__)
+#  define ARCHITECTURE_ID "TMS320C28x"
+
+# elif defined(__TMS320C6X__) || defined(_TMS320C6X)
+#  define ARCHITECTURE_ID "TMS320C6x"
+
+# else /* unknown architecture */
+#  define ARCHITECTURE_ID ""
+# endif
+
+# elif defined(__ADSPSHARC__)
+#  define ARCHITECTURE_ID "SHARC"
+
+# elif defined(__ADSPBLACKFIN__)
+#  define ARCHITECTURE_ID "Blackfin"
+
+#elif defined(__TASKING__)
+
+# if defined(__CTC__) || defined(__CPTC__)
+#  define ARCHITECTURE_ID "TriCore"
+
+# elif defined(__CMCS__)
+#  define ARCHITECTURE_ID "MCS"
+
+# elif defined(__CARM__)
+#  define ARCHITECTURE_ID "ARM"
+
+# elif defined(__CARC__)
+#  define ARCHITECTURE_ID "ARC"
+
+# elif defined(__C51__)
+#  define ARCHITECTURE_ID "8051"
+
+# elif defined(__CPCP__)
+#  define ARCHITECTURE_ID "PCP"
+
+# else
+#  define ARCHITECTURE_ID ""
+# endif
+
+#else
+#  define ARCHITECTURE_ID
+#endif
+
+/* Convert integer to decimal digit literals.  */
+#define DEC(n)                   \
+  ('0' + (((n) / 10000000)%10)), \
+  ('0' + (((n) / 1000000)%10)),  \
+  ('0' + (((n) / 100000)%10)),   \
+  ('0' + (((n) / 10000)%10)),    \
+  ('0' + (((n) / 1000)%10)),     \
+  ('0' + (((n) / 100)%10)),      \
+  ('0' + (((n) / 10)%10)),       \
+  ('0' +  ((n) % 10))
+
+/* Convert integer to hex digit literals.  */
+#define HEX(n)             \
+  ('0' + ((n)>>28 & 0xF)), \
+  ('0' + ((n)>>24 & 0xF)), \
+  ('0' + ((n)>>20 & 0xF)), \
+  ('0' + ((n)>>16 & 0xF)), \
+  ('0' + ((n)>>12 & 0xF)), \
+  ('0' + ((n)>>8  & 0xF)), \
+  ('0' + ((n)>>4  & 0xF)), \
+  ('0' + ((n)     & 0xF))
+
+/* Construct a string literal encoding the version number. */
+#ifdef COMPILER_VERSION
+char const* info_version = "INFO" ":" "compiler_version[" COMPILER_VERSION "]";
+
+/* Construct a string literal encoding the version number components. */
+#elif defined(COMPILER_VERSION_MAJOR)
+char const info_version[] = {
+  'I', 'N', 'F', 'O', ':',
+  'c','o','m','p','i','l','e','r','_','v','e','r','s','i','o','n','[',
+  COMPILER_VERSION_MAJOR,
+# ifdef COMPILER_VERSION_MINOR
+  '.', COMPILER_VERSION_MINOR,
+#  ifdef COMPILER_VERSION_PATCH
+   '.', COMPILER_VERSION_PATCH,
+#   ifdef COMPILER_VERSION_TWEAK
+    '.', COMPILER_VERSION_TWEAK,
+#   endif
+#  endif
+# endif
+  ']','\0'};
+#endif
+
+/* Construct a string literal encoding the internal version number. */
+#ifdef COMPILER_VERSION_INTERNAL
+char const info_version_internal[] = {
+  'I', 'N', 'F', 'O', ':',
+  'c','o','m','p','i','l','e','r','_','v','e','r','s','i','o','n','_',
+  'i','n','t','e','r','n','a','l','[',
+  COMPILER_VERSION_INTERNAL,']','\0'};
+#elif defined(COMPILER_VERSION_INTERNAL_STR)
+char const* info_version_internal = "INFO" ":" "compiler_version_internal[" COMPILER_VERSION_INTERNAL_STR "]";
+#endif
+
+/* Construct a string literal encoding the version number components. */
+#ifdef SIMULATE_VERSION_MAJOR
+char const info_simulate_version[] = {
+  'I', 'N', 'F', 'O', ':',
+  's','i','m','u','l','a','t','e','_','v','e','r','s','i','o','n','[',
+  SIMULATE_VERSION_MAJOR,
+# ifdef SIMULATE_VERSION_MINOR
+  '.', SIMULATE_VERSION_MINOR,
+#  ifdef SIMULATE_VERSION_PATCH
+   '.', SIMULATE_VERSION_PATCH,
+#   ifdef SIMULATE_VERSION_TWEAK
+    '.', SIMULATE_VERSION_TWEAK,
+#   endif
+#  endif
+# endif
+  ']','\0'};
+#endif
+
+/* Construct the string literal in pieces to prevent the source from
+   getting matched.  Store it in a pointer rather than an array
+   because some compilers will just produce instructions to fill the
+   array rather than assigning a pointer to a static array.  */
+char const* info_platform = "INFO" ":" "platform[" PLATFORM_ID "]";
+char const* info_arch = "INFO" ":" "arch[" ARCHITECTURE_ID "]";
+
+
+
+#define CXX_STD_98 199711L
+#define CXX_STD_11 201103L
+#define CXX_STD_14 201402L
+#define CXX_STD_17 201703L
+#define CXX_STD_20 202002L
+#define CXX_STD_23 202302L
+
+#if defined(__INTEL_COMPILER) && defined(_MSVC_LANG)
+#  if _MSVC_LANG > CXX_STD_17
+#    define CXX_STD _MSVC_LANG
+#  elif _MSVC_LANG == CXX_STD_17 && defined(__cpp_aggregate_paren_init)
+#    define CXX_STD CXX_STD_20
+#  elif _MSVC_LANG > CXX_STD_14 && __cplusplus > CXX_STD_17
+#    define CXX_STD CXX_STD_20
+#  elif _MSVC_LANG > CXX_STD_14
+#    define CXX_STD CXX_STD_17
+#  elif defined(__INTEL_CXX11_MODE__) && defined(__cpp_aggregate_nsdmi)
+#    define CXX_STD CXX_STD_14
+#  elif defined(__INTEL_CXX11_MODE__)
+#    define CXX_STD CXX_STD_11
+#  else
+#    define CXX_STD CXX_STD_98
+#  endif
+#elif defined(_MSC_VER) && defined(_MSVC_LANG)
+#  if _MSVC_LANG > __cplusplus
+#    define CXX_STD _MSVC_LANG
+#  else
+#    define CXX_STD __cplusplus
+#  endif
+#elif defined(__NVCOMPILER)
+#  if __cplusplus == CXX_STD_17 && defined(__cpp_aggregate_paren_init)
+#    define CXX_STD CXX_STD_20
+#  else
+#    define CXX_STD __cplusplus
+#  endif
+#elif defined(__INTEL_COMPILER) || defined(__PGI)
+#  if __cplusplus == CXX_STD_11 && defined(__cpp_namespace_attributes)
+#    define CXX_STD CXX_STD_17
+#  elif __cplusplus == CXX_STD_11 && defined(__cpp_aggregate_nsdmi)
+#    define CXX_STD CXX_STD_14
+#  else
+#    define CXX_STD __cplusplus
+#  endif
+#elif (defined(__IBMCPP__) || defined(__ibmxl__)) && defined(__linux__)
+#  if __cplusplus == CXX_STD_11 && defined(__cpp_aggregate_nsdmi)
+#    define CXX_STD CXX_STD_14
+#  else
+#    define CXX_STD __cplusplus
+#  endif
+#elif __cplusplus == 1 && defined(__GXX_EXPERIMENTAL_CXX0X__)
+#  define CXX_STD CXX_STD_11
+#else
+#  define CXX_STD __cplusplus
+#endif
+
+const char* info_language_standard_default = "INFO" ":" "standard_default["
+#if CXX_STD > CXX_STD_23
+  "26"
+#elif CXX_STD > CXX_STD_20
+  "23"
+#elif CXX_STD > CXX_STD_17
+  "20"
+#elif CXX_STD > CXX_STD_14
+  "17"
+#elif CXX_STD > CXX_STD_11
+  "14"
+#elif CXX_STD >= CXX_STD_11
+  "11"
+#else
+  "98"
+#endif
+"]";
+
+const char* info_language_extensions_default = "INFO" ":" "extensions_default["
+#if (defined(__clang__) || defined(__GNUC__) || defined(__xlC__) ||           \
+     defined(__TI_COMPILER_VERSION__)) &&                                     \
+  !defined(__STRICT_ANSI__)
+  "ON"
+#else
+  "OFF"
+#endif
+"]";
+
+/*--------------------------------------------------------------------------*/
+
+int main(int argc, char* argv[])
+{
+  int require = 0;
+  require += info_compiler[argc];
+  require += info_platform[argc];
+  require += info_arch[argc];
+#ifdef COMPILER_VERSION_MAJOR
+  require += info_version[argc];
+#endif
+#ifdef COMPILER_VERSION_INTERNAL
+  require += info_version_internal[argc];
+#endif
+#ifdef SIMULATE_ID
+  require += info_simulate[argc];
+#endif
+#ifdef SIMULATE_VERSION_MAJOR
+  require += info_simulate_version[argc];
+#endif
+#if defined(__CRAYXT_COMPUTE_LINUX_TARGET)
+  require += info_cray[argc];
+#endif
+  require += info_language_standard_default[argc];
+  require += info_language_extensions_default[argc];
+  (void)argv;
+  return require;
+}

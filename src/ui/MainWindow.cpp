@@ -7,7 +7,6 @@
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
     
-    // استفاده از حداقل اندازه به جای اندازه ثابت برای سازگاری با ریسایز و فول‌اسکرین
     setMinimumSize(420, 680);
     resize(420, 680);
     setStyleSheet("background-color: #1e272e;");
@@ -15,16 +14,23 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_stackedWidget = new QStackedWidget(this);
     setCentralWidget(m_stackedWidget);
 
+    // ساخت تمام صفحات
     m_mainMenu = new MainMenuWidget(this);
     m_startMenu = new StartGameWidget(this);
     m_settingsWidget = new SettingsWidget(this);
     m_scoreboardWidget = new ScoreboardWidget(&m_scoreManager, this);
+    m_advSettingsWidget = new AdvancedSettingsWidget(this); // <--- ساخته شد
 
-    m_stackedWidget->addWidget(m_mainMenu);         // Index 0
-    m_stackedWidget->addWidget(m_startMenu);        // Index 1
-    m_stackedWidget->addWidget(m_settingsWidget);     // Index 2
-    m_stackedWidget->addWidget(m_scoreboardWidget);   // Index 3
+    // اضافه کردن به StackedWidget
+    m_stackedWidget->addWidget(m_mainMenu);          // Index 0
+    m_stackedWidget->addWidget(m_startMenu);         // Index 1
+    m_stackedWidget->addWidget(m_settingsWidget);      // Index 2
+    m_stackedWidget->addWidget(m_scoreboardWidget);    // Index 3
+    m_stackedWidget->addWidget(m_advSettingsWidget);   // Index 4
 
+    // -----------------------------------------------------------------
+    // اتصالات منوی اصلی
+    // -----------------------------------------------------------------
     connect(m_mainMenu, &MainMenuWidget::startGameClicked, this, [this]() { m_stackedWidget->setCurrentIndex(1); });
     connect(m_mainMenu, &MainMenuWidget::settingsClicked, this, [this]() { m_stackedWidget->setCurrentIndex(2); });
     connect(m_mainMenu, &MainMenuWidget::scoreboardClicked, this, [this]() {
@@ -33,10 +39,34 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     });
     connect(m_mainMenu, &MainMenuWidget::exitClicked, this, &QMainWindow::close);
 
+    // -----------------------------------------------------------------
+    // اتصالات بازگشت و تنظیمات
+    // -----------------------------------------------------------------
     connect(m_startMenu, &StartGameWidget::launchGame, this, &MainWindow::startNewGame);
     connect(m_startMenu, &StartGameWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
-    connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
     connect(m_scoreboardWidget, &ScoreboardWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    
+    // بازگشت از مینی‌گیم تنظیمات به منوی اصلی
+    connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    
+    // شلیک به حباب PRO MODE -> رفتن به تنظیمات پیشرفته (ایندکس ۴)
+    connect(m_settingsWidget, &SettingsWidget::proModeClicked, this, [this]() {
+        m_stackedWidget->setCurrentIndex(4);
+    });
+
+    // بازگشت از تنظیمات پیشرفته -> رفتن به مینی‌گیم (ایندکس ۲)
+    connect(m_advSettingsWidget, &AdvancedSettingsWidget::backClicked, this, [this]() {
+        m_stackedWidget->setCurrentIndex(2);
+    });
+
+    // اعمال تغییر تمام‌صفحه از مینی‌گیم
+    connect(m_settingsWidget, &SettingsWidget::fullscreenToggled, this, [this](bool enabled) {
+        if (enabled) {
+            showFullScreen();
+        } else {
+            showNormal();
+        }
+    });
 }
 
 void MainWindow::startNewGame(const QString& username, const QString& mode) {

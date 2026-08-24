@@ -34,6 +34,8 @@ void SettingsWidget::initTargets() {
     
     addTarget(TargetType::EMP, "SHOCKWAVE\n(TEST)", QColor(255, 120, 0), 40);
     addTarget(TargetType::BackToMenu, "EXIT TO\nMENU", QColor(200, 200, 200), 65);
+
+    addTarget(TargetType::ProMode, "PRO MODE\nTERMINAL", QColor(0, 255, 100), 60);
 }
 
 void SettingsWidget::scatterTargets() {
@@ -155,6 +157,7 @@ void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
         case TargetType::ThemeArcade: m_currentTheme = "Retro Arcade"; triggerEMP(t.pos); break;
         case TargetType::EMP: triggerEMP(t.pos); break;
         case TargetType::BackToMenu: emit backClicked(); break;
+        case TargetType::ProMode: emit proModeClicked(); break;   
     }
 }
 

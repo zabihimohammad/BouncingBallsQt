@@ -27,7 +27,11 @@ set(SOURCES
     src/ui/SettingsWidget.cpp
     src/ui/ScoreboardWidget.cpp
     src/ui/PauseDialog.cpp
-    src/ui/GameOverDialog.cpp src/ui/waterbackgroundwidget.cpp src/ui/poolballswidget.cpp
+    src/ui/GameOverDialog.cpp 
+    src/ui/waterbackgroundwidget.cpp 
+    src/ui/poolballswidget.cpp
+    src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.h
 )
 
 set(HEADERS
@@ -47,7 +51,13 @@ set(HEADERS
     src/ui/PauseDialog.h
     src/ui/GameOverDialog.h
     src/ui/waterbackgroundwidget.h
-    src/ui/poolballswidget.h
+    src/ui/poolballswidget.h 
+    src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.cpp
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

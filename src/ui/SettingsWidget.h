@@ -7,8 +7,11 @@
 #include <QString>
 
 enum class TargetType { 
-    VolUp, VolDown, Fullscreen, ThemeNeon, ThemeArcade, EMP, BackToMenu 
+    VolUp, VolDown, Fullscreen, ThemeNeon, ThemeArcade, EMP, BackToMenu, ProMode // <--- ProMode اضافه شد
 };
+
+
+void proModeClicked(); // <--- سیگنال جدید
 
 struct SettingTarget {
     QPointF pos;
@@ -41,6 +44,7 @@ public:
     signals:
         void backClicked();
     void fullscreenToggled(bool enabled);
+    void proModeClicked(); // <--- سیگنال جدید
 
 protected:
     void paintEvent(QPaintEvent* event) override;
