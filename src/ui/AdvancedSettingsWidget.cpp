@@ -146,14 +146,19 @@ void AdvancedSettingsWidget::updateAudioLauncher() {
         m_audioBallPos += m_audioBallVel;
         m_audioBallVel.setY(m_audioBallVel.y() + 0.6); 
 
+        // شلیک به کریستال تغییر آهنگ
         if (std::hypot(m_audioBallPos.x() - m_trackCrystalPos.x(), m_audioBallPos.y() - m_trackCrystalPos.y()) < 45.0) {
             m_currentTrackIndex = (m_currentTrackIndex + 1) % m_tracks.size(); 
             spawnParticles(m_audioBallPos, QColor(255, 51, 200), 40, 1.5);
             m_audioBallFlying = false; 
-            QApplication::beep();
+            
+            // تغییر آهنگ واقعی
+            SoundManager::instance().playMusic(m_tracks[m_currentTrackIndex]);
+            SoundManager::instance().playPop();
             return; 
         }
 
+        // فرود روی خط‌کش تنظیم ولوم
         qreal groundY = height() - 100;
         if (m_audioBallPos.y() >= groundY) {
             m_audioBallPos.setY(groundY);
@@ -164,8 +169,12 @@ void AdvancedSettingsWidget::updateAudioLauncher() {
             qreal hitX = m_audioBallPos.x() - startX;
             m_volume = qBound(0, (int)std::round((hitX / (endX - startX)) * 100.0), 100);
 
+            // اعمال ولوم واقعی
+            SoundManager::instance().setMusicVolume(m_volume);
+            SoundManager::instance().setSfxVolume(m_volume);
+
             spawnParticles(m_audioBallPos, QColor(0, 242, 254), 25);
-            QApplication::beep(); 
+            SoundManager::instance().playBounce();
             m_currentScreenShake = 10.0; 
         }
     }

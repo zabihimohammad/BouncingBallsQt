@@ -7,7 +7,7 @@
 #include <QColor>
 #include <QPolygonF>
 #include <QStringList>
-
+#include "../core/SoundManager.h"
 struct OrbitNode {
     qreal angle;          
     QString label;        
