@@ -1,107 +1,315 @@
+=== BOUNCING BALLS QT PROJECT SOURCE CODE BUNDLE ===
+
+======================================================================
+FILE: CMakeLists.txt
+======================================================================
+cmake_minimum_required(VERSION 3.16)
+project(BouncingBalls LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets Multimedia)
+
+set(SOURCES
+    src/main.cpp
+    src/core/Ball.cpp
+    src/core/GridManager.cpp
+    src/core/ScoreManager.cpp
+    src/core/SoundManager.cpp
+    src/gameplay/GameScene.cpp
+    src/gameplay/GameView.cpp
+    src/gameplay/CannonItem.cpp
+    src/gameplay/AimLineItem.cpp
+    src/ui/MainWindow.cpp
+    src/ui/MainMenuWidget.cpp
+    src/ui/StartGameWidget.cpp
+    src/ui/SettingsWidget.cpp
+    src/ui/ScoreboardWidget.cpp
+    src/ui/PauseDialog.cpp
+    src/ui/GameOverDialog.cpp 
+    src/ui/waterbackgroundwidget.cpp 
+    src/ui/poolballswidget.cpp
+    src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.h
+)
+
+set(HEADERS
+    src/core/Ball.h
+    src/core/GridManager.h
+    src/core/ScoreManager.h
+    src/core/SoundManager.h
+    src/gameplay/GameScene.h
+    src/gameplay/GameView.h
+    src/gameplay/CannonItem.h
+    src/gameplay/AimLineItem.h
+    src/ui/MainWindow.h
+    src/ui/MainMenuWidget.h
+    src/ui/StartGameWidget.h
+    src/ui/SettingsWidget.h
+    src/ui/ScoreboardWidget.h
+    src/ui/PauseDialog.h
+    src/ui/GameOverDialog.h
+    src/ui/waterbackgroundwidget.h
+    src/ui/poolballswidget.h 
+    src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.h
+        src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.cpp
+        src/ui/AdvancedSettingsWidget.cpp
+)
+
+add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt${QT_VERSION_MAJOR}::Core
+    Qt${QT_VERSION_MAJOR}::Gui
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Multimedia
+)
+# ماژول OpenGLWidgets را اضافه کنید
+find_package(Qt6 COMPONENTS Core Gui Widgets Multimedia Network OpenGLWidgets REQUIRED)
+
+# در بخش target_link_libraries آن را لینک کنید
+target_link_libraries(BouncingBalls PRIVATE
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+        Qt6::Multimedia
+        Qt6::Network
+        Qt6::OpenGLWidgets
+)
+
+======================================================================
+FILE: all_project_code.txt
+======================================================================
 
 
-// ============================================================
-// FILE: ./src/core/Ball.cpp
-// ============================================================
+======================================================================
+FILE: src\main.cpp
+======================================================================
+#include <QApplication>
+#include <QFont>
+#include <iostream>
+#include "ui/MainWindow.h"
+#include "ui/ThemeManager.h"
+#include "core/Ball.h"
+#include "core/GridManager.h"
 
+void runLogicSelfTest() {
+#ifdef QT_DEBUG
+    std::cout << "======================================\n";
+    std::cout << "  Starting Grid & Ball Logic Tests... \n";
+    std::cout << "======================================\n";
+
+    GridManager grid;
+    grid.generateRandomLevel();
+
+    QPointF p0 = grid.getCenterPos(0, 0);
+    QPointF p1 = grid.getCenterPos(1, 0);
+    std::cout << "[PASS] Hex Coordinates Check: (0,0) -> (" << p0.x() << ", " << p0.y()
+              << ") | (1,0) -> (" << p1.x() << ", " << p1.y() << ")\n";
+
+    auto colors = grid.getRemainingColors();
+    std::cout << "[PASS] Active Colors on Grid: " << colors.size() << " distinct colors\n";
+
+    Ball* topBall = grid.getBall(0, 0);
+    if (topBall) {
+        auto matches = grid.findMatches(0, 0, topBall->getPrimaryColor());
+        std::cout << "[PASS] Match-3 BFS evaluated for root node.\n";
+    }
+    std::cout << "======================================\n\n";
+#endif
+}
+
+int main(int argc, char *argv[]) {
+    QApplication app(argc, argv);
+
+    QFont defaultFont("Segoe UI", 10);
+    defaultFont.setStyleHint(QFont::SansSerif);
+    app.setFont(defaultFont);
+
+    app.setStyleSheet(ThemeManager::getMasterStyleSheet());
+
+    runLogicSelfTest();
+
+    MainWindow window;
+    window.show();
+    window.raise();
+    window.activateWindow();
+
+    return app.exec();
+}
+
+======================================================================
+FILE: src\core\Ball.cpp
+======================================================================
 #include "Ball.h"
 #include <QRandomGenerator>
+#include <algorithm>
 
-Ball::Ball(BallColor color, int row, int col)
-    : m_color(color), m_row(row), m_col(col), m_locked(color == BallColor::LOCKED), m_effect(TimeEffect::NONE) {}
-
-QColor Ball::toQColor(BallColor c) {
-    switch (c) {
-        case BallColor::RED: return QColor(235, 77, 75);
-        case BallColor::BLUE: return QColor(72, 52, 212);
-        case BallColor::GREEN: return QColor(106, 176, 76);
-        case BallColor::YELLOW: return QColor(249, 202, 36);
-        case BallColor::PURPLE: return QColor(190, 46, 221);
-        case BallColor::BLACK: return QColor(44, 62, 80);
-        case BallColor::DUAL: return QColor(224, 86, 253);
-        case BallColor::LOCKED: return QColor(149, 175, 192);
-        case BallColor::RAINBOW: return QColor(255, 255, 255);
-        case BallColor::BOMB: return QColor(231, 76, 60);
-        case BallColor::LASER: return QColor(0, 210, 211);
-    }
-    return Qt::white;
+Ball::Ball(BallColor primaryColor, BallType type, BallColor secondaryColor, int row, int col, bool isLocked)
+        : m_primaryColor(primaryColor),
+          m_secondaryColor(secondaryColor),
+          m_type(type),
+          m_row(row),
+          m_col(col),
+          m_isLocked(isLocked),
+          m_position(0.0, 0.0) {
 }
 
-BallColor Ball::getRandomColor(int colorCount) {
-    int r = QRandomGenerator::global()->bounded(colorCount);
+bool Ball::matches(const Ball* other) const {
+    if (!other) return false;
+    return matches(other->getPrimaryColor(), other->getType(), other->getSecondaryColor());
+}
+
+bool Ball::matches(BallColor otherColor, BallType otherType, BallColor otherSecColor) const {
+    if (isEmpty() || otherColor == BallColor::None) return false;
+    if (m_isLocked) return false;
+
+    // توپ سیاه با هیچ توپی همرنگ نمی‌شود
+    if (isBlack() || otherColor == BallColor::Black) return false;
+
+    // اگر هر کدام از دو توپ وایلدکارد (Rainbow) باشند
+    if (m_type == BallType::Rainbow || otherType == BallType::Rainbow) return true;
+
+    // تطبیق مستقیم رنگ اصلی
+    if (m_primaryColor == otherColor) return true;
+
+    // بررسی حالت‌های دو رنگ (DualColor)
+    if (m_type == BallType::DualColor && m_secondaryColor == otherColor) return true;
+    if (otherType == BallType::DualColor && (m_primaryColor == otherSecColor)) return true;
+    if (m_type == BallType::DualColor && otherType == BallType::DualColor) {
+        return (m_secondaryColor == otherSecColor || m_primaryColor == otherSecColor || m_secondaryColor == otherColor);
+    }
+
+    return false;
+}
+
+QColor Ball::toQColor(BallColor color) {
+    switch (color) {
+        case BallColor::Red:     return QColor(235, 77, 75);
+        case BallColor::Green:   return QColor(106, 176, 76);
+        case BallColor::Blue:    return QColor(72, 52, 212);
+        case BallColor::Yellow:  return QColor(249, 202, 36);
+        case BallColor::Purple:  return QColor(190, 46, 221);
+        case BallColor::Black:   return QColor(44, 62, 80);
+        default:                 return Qt::transparent;
+    }
+}
+
+QColor Ball::getDisplayColor() const {
+    if (m_isLocked) return QColor(149, 175, 192); // رنگ خاکستری قفل
+    if (m_type == BallType::Rainbow) return QColor(255, 230, 0);
+    if (m_type == BallType::Bomb) return QColor(231, 76, 60);
+    if (m_type == BallType::Laser) return QColor(0, 210, 211);
+    return toQColor(m_primaryColor);
+}
+
+BallColor Ball::getRandomColor(int count) {
+    int maxColors = std::clamp(count, 1, 5);
+    int r = QRandomGenerator::global()->bounded(maxColors);
+
     switch (r) {
-        case 0: return BallColor::RED;
-        case 1: return BallColor::BLUE;
-        case 2: return BallColor::GREEN;
-        case 3: return BallColor::YELLOW;
-        case 4: return BallColor::PURPLE;
-        default: return BallColor::RED;
+        case 0:  return BallColor::Red;
+        case 1:  return BallColor::Green;
+        case 2:  return BallColor::Blue;
+        case 3:  return BallColor::Yellow;
+        case 4:  return BallColor::Purple;
+        default: return BallColor::Red;
     }
 }
 
-
-// ============================================================
-// FILE: ./src/core/Ball.h
-// ============================================================
-
+======================================================================
+FILE: src\core\Ball.h
+======================================================================
 #pragma once
-#include <QColor>
-#include <QGraphicsItem>
-#include <QPainter>
 
+#include <QColor>
+#include <QPointF>
+
+// رنگ‌های پایه استاندارد
 enum class BallColor {
-    RED,
-    BLUE,
-    GREEN,
-    YELLOW,
-    PURPLE,
-    BLACK,       // Unpoppable ground ball
-    DUAL,        // Bonus: Dual-color ball
-    LOCKED,      // Bonus: Locked ball
-    RAINBOW,     // Special: Wildcard
-    BOMB,        // Special: Explosive
-    LASER        // Special: Laser line clear
+    None,
+    Red,
+    Green,
+    Blue,
+    Yellow,
+    Purple,
+    Black       // توپ مشکی خنثی / ضد انفجار
 };
 
-enum class TimeEffect {
-    NONE,
-    PAUSE,
-    SLOW_MOTION
+// رفتار و نقش عملیاتی توپ
+enum class BallType {
+    Regular,      // توپ عادی
+    DualColor,    // توپ دو رنگ
+    Rainbow,      // وایلدکارد (تطبیق با همه)
+    Bomb,         // انفجار شعاعی ۳x۳
+    Laser         // پاکسازی خطی افقی
 };
 
 class Ball {
 public:
-    Ball(BallColor color = BallColor::RED, int row = -1, int col = -1);
+    Ball(BallColor primaryColor = BallColor::None,
+         BallType type = BallType::Regular,
+         BallColor secondaryColor = BallColor::None,
+         int row = -1,
+         int col = -1,
+         bool isLocked = false);
 
-    BallColor getColor() const { return m_color; }
-    void setColor(BallColor c) { m_color = c; }
+    // Getters & Setters
+    BallColor getPrimaryColor() const { return m_primaryColor; }
+    void setPrimaryColor(BallColor color) { m_primaryColor = color; }
+
+    BallColor getSecondaryColor() const { return m_secondaryColor; }
+    void setSecondaryColor(BallColor color) { m_secondaryColor = color; }
+
+    BallType getType() const { return m_type; }
+    void setType(BallType type) { m_type = type; }
 
     int getRow() const { return m_row; }
     int getCol() const { return m_col; }
     void setGridPos(int r, int c) { m_row = r; m_col = c; }
 
-    bool isLocked() const { return m_locked; }
-    void unlock() { m_locked = false; }
+    bool isLocked() const { return m_isLocked; }
+    void setLocked(bool locked) { m_isLocked = locked; }
+    void unlock() { m_isLocked = false; }
 
-    TimeEffect getTimeEffect() const { return m_effect; }
-    void setTimeEffect(TimeEffect eff) { m_effect = eff; }
+    QPointF getPosition() const { return m_position; }
+    void setPosition(const QPointF &pos) { m_position = pos; }
 
-    static QColor toQColor(BallColor c);
-    static BallColor getRandomColor(int colorCount = 5);
+    // متدهای وضعیت و منطق
+    bool isEmpty() const { return m_primaryColor == BallColor::None; }
+    bool isBlack() const { return m_primaryColor == BallColor::Black; }
+
+    // تطبیق هوشمند دوطرفه بین دو توپ یا با یک رنگ و نوع مشخص
+    bool matches(const Ball* other) const;
+    bool matches(BallColor color, BallType type = BallType::Regular, BallColor secColor = BallColor::None) const;
+
+    // توابع کمکی گرافیک و شانس
+    QColor getDisplayColor() const;
+    static QColor toQColor(BallColor color);
+    static BallColor getRandomColor(int count = 5);
 
 private:
-    BallColor m_color;
+    BallColor m_primaryColor;
+    BallColor m_secondaryColor;
+    BallType m_type;
     int m_row;
     int m_col;
-    bool m_locked;
-    TimeEffect m_effect;
+    bool m_isLocked;
+    QPointF m_position;
 };
 
-
-// ============================================================
-// FILE: ./src/core/GridManager.cpp
-// ============================================================
-
+======================================================================
+FILE: src\core\GridManager.cpp
+======================================================================
 #include "GridManager.h"
 #include <cmath>
 #include <queue>
@@ -116,66 +324,101 @@ GridManager::GridManager() {
     }
 }
 
-void GridManager::initGrid() {
+GridManager::~GridManager() {
+    clearGrid();
+}
+
+void GridManager::clearGrid() {
     for (int r = 0; r < ROWS; ++r) {
         for (size_t c = 0; c < m_grid[r].size(); ++c) {
-            delete m_grid[r][c];
-            m_grid[r][c] = nullptr;
+            if (m_grid[r][c]) {
+                delete m_grid[r][c];
+                m_grid[r][c] = nullptr;
+            }
         }
     }
 }
 
+void GridManager::initGrid() {
+    clearGrid();
+}
+
+BallColor GridManager::getStandardColor(int index) {
+    switch (std::abs(index) % 5) {
+        case 0: return BallColor::Red;
+        case 1: return BallColor::Green;
+        case 2: return BallColor::Blue;
+        case 3: return BallColor::Yellow;
+        case 4: return BallColor::Purple;
+        default: return BallColor::Red;
+    }
+}
+
 void GridManager::loadLevel(int levelNumber) {
-    initGrid();
+    clearGrid();
     int rowsToFill = 5;
     for (int r = 0; r < rowsToFill; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
-            BallColor col = static_cast<BallColor>((c + r + levelNumber) % 5);
-            m_grid[r][c] = new Ball(col, r, c);
+            BallColor col = getStandardColor(c + r + levelNumber);
+            m_grid[r][c] = new Ball(col, BallType::Regular, BallColor::None, r, c);
         }
     }
 }
 
 void GridManager::generateRandomLevel() {
-    initGrid();
+    clearGrid();
     for (int r = 0; r < 5; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
-            // Cluster logic: higher probability of neighbor color
             BallColor chosen = Ball::getRandomColor(5);
+            // ۶۵٪ شانس اتصال همسایه‌ها برای ایجاد کلاسترهای قابل حذف
             if (c > 0 && m_grid[r][c - 1] && QRandomGenerator::global()->bounded(100) < 65) {
-                chosen = m_grid[r][c - 1]->getColor();
+                chosen = m_grid[r][c - 1]->getPrimaryColor();
             }
-            m_grid[r][c] = new Ball(chosen, r, c);
+            m_grid[r][c] = new Ball(chosen, BallType::Regular, BallColor::None, r, c);
         }
     }
 }
 
 void GridManager::addRowFromTop() {
+    int lastRow = ROWS - 1;
+    for (size_t c = 0; c < m_grid[lastRow].size(); ++c) {
+        if (m_grid[lastRow][c]) {
+            delete m_grid[lastRow][c];
+            m_grid[lastRow][c] = nullptr;
+        }
+    }
+
     for (int r = ROWS - 1; r > 0; --r) {
-        int currentCols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
-        int prevCols = ((r - 1) % 2 == 0) ? COLS_EVEN : COLS_ODD;
-        for (int c = 0; c < currentCols; ++c) {
-            if (c < prevCols) {
+        int targetCols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        int srcCols = ((r - 1) % 2 == 0) ? COLS_EVEN : COLS_ODD;
+
+        for (int c = 0; c < targetCols; ++c) {
+            if (c < srcCols) {
                 m_grid[r][c] = m_grid[r - 1][c];
-                if (m_grid[r][c]) m_grid[r][c]->setGridPos(r, c);
+                if (m_grid[r][c]) {
+                    m_grid[r][c]->setGridPos(r, c);
+                }
             } else {
                 m_grid[r][c] = nullptr;
             }
         }
     }
-    // New row at 0
-    int cols0 = COLS_EVEN;
-    for (int c = 0; c < cols0; ++c) {
-        m_grid[0][c] = new Ball(Ball::getRandomColor(5), 0, c);
+
+    for (int c = 0; c < COLS_EVEN; ++c) {
+        m_grid[0][c] = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
     }
 }
 
-bool GridManager::isOccupied(int r, int c) const {
+bool GridManager::isValidCoord(int r, int c) const {
     if (r < 0 || r >= ROWS) return false;
     int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
-    if (c < 0 || c >= cols) return false;
+    return (c >= 0 && c < cols);
+}
+
+bool GridManager::isOccupied(int r, int c) const {
+    if (!isValidCoord(r, c)) return false;
     return m_grid[r][c] != nullptr;
 }
 
@@ -184,12 +427,17 @@ Ball* GridManager::getBall(int r, int c) {
     return m_grid[r][c];
 }
 
+const Ball* GridManager::getBall(int r, int c) const {
+    if (!isOccupied(r, c)) return nullptr;
+    return m_grid[r][c];
+}
+
 bool GridManager::setBall(int r, int c, Ball* ball) {
-    if (r < 0 || r >= ROWS) return false;
-    int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
-    if (c < 0 || c >= cols) return false;
+    if (!isValidCoord(r, c)) return false;
     m_grid[r][c] = ball;
-    if (ball) ball->setGridPos(r, c);
+    if (ball) {
+        ball->setGridPos(r, c);
+    }
     return true;
 }
 
@@ -203,9 +451,9 @@ void GridManager::removeBall(int r, int c) {
 QPointF GridManager::getCenterPos(int r, int c) const {
     qreal x = BALL_RADIUS + c * BALL_DIAMETER;
     if (r % 2 != 0) {
-        x += BALL_RADIUS; // Odd row offset
+        x += BALL_RADIUS; // آفست سطرهای فرد در شبکه هگزاگونال
     }
-    qreal y = BALL_RADIUS + r * (BALL_DIAMETER * 0.866025); // sqrt(3)/2
+    qreal y = BALL_RADIUS + r * (BALL_DIAMETER * 0.866025);
     return QPointF(x, y);
 }
 
@@ -225,26 +473,29 @@ void GridManager::getGridCoords(const QPointF& pos, int& outR, int& outC) const 
 std::vector<std::pair<int, int>> GridManager::getNeighbors(int r, int c) const {
     std::vector<std::pair<int, int>> neighbors;
     bool even = (r % 2 == 0);
-    std::vector<std::pair<int, int>> deltas = even ?
-        std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, -1}, {-1, 0}, {1, -1}, {1, 0}} :
-        std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {-1, 1}, {1, 0}, {1, 1}};
 
-    for (auto d : deltas) {
+    std::vector<std::pair<int, int>> deltas = even ?
+                                              std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, -1}, {-1, 0}, {1, -1}, {1, 0}} :
+                                              std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {-1, 1}, {1, 0}, {1, 1}};
+
+    for (const auto& d : deltas) {
         int nr = r + d.first;
         int nc = c + d.second;
-        if (nr >= 0 && nr < ROWS) {
-            int cols = (nr % 2 == 0) ? COLS_EVEN : COLS_ODD;
-            if (nc >= 0 && nc < cols) {
-                neighbors.push_back({nr, nc});
-            }
+        if (isValidCoord(nr, nc)) {
+            neighbors.push_back({nr, nc});
         }
     }
     return neighbors;
 }
 
-std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC, BallColor color) {
+std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC, BallColor color, BallType type, BallColor secondaryColor) {
     std::vector<std::pair<int, int>> matched;
     if (!isOccupied(startR, startC)) return matched;
+
+    Ball* startBall = m_grid[startR][startC];
+    BallColor matchColor = (color != BallColor::None) ? color : startBall->getPrimaryColor();
+    BallType matchType = (color != BallColor::None) ? type : startBall->getType();
+    BallColor matchSecColor = (color != BallColor::None) ? secondaryColor : startBall->getSecondaryColor();
 
     std::set<std::pair<int, int>> visited;
     std::queue<std::pair<int, int>> q;
@@ -259,8 +510,10 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
 
         for (auto [nr, nc] : getNeighbors(r, c)) {
             if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
-                BallColor ncCol = m_grid[nr][nc]->getColor();
-                if (ncCol == color || ncCol == BallColor::RAINBOW || color == BallColor::RAINBOW) {
+                Ball* neighbor = m_grid[nr][nc];
+
+                // استفاده از متد داخلی matches کلاس Ball برای تمیزی معماری
+                if (neighbor->matches(matchColor, matchType, matchSecColor)) {
                     visited.insert({nr, nc});
                     q.push({nr, nc});
                 }
@@ -268,7 +521,8 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
         }
     }
 
-    if (matched.size() < 3 && color != BallColor::RAINBOW) {
+    // حداقل ۳ توپ هم‌رنگ برای انفجار لازم است، مگر برای توپ وایلدکارد (Rainbow)
+    if (matched.size() < 3 && matchType != BallType::Rainbow) {
         return {};
     }
     return matched;
@@ -278,7 +532,7 @@ std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
     std::set<std::pair<int, int>> connectedToTop;
     std::queue<std::pair<int, int>> q;
 
-    // Start BFS from row 0
+    // شروع Flood-Fill از تمام توپ‌های سطر اول متصل به سقف
     for (int c = 0; c < COLS_EVEN; ++c) {
         if (isOccupied(0, c)) {
             q.push({0, c});
@@ -298,6 +552,7 @@ std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
         }
     }
 
+    // جداسازی تمام توپ‌هایی که هیچ اتصالی به سقف ندارند
     std::vector<std::pair<int, int>> floating;
     for (int r = 0; r < ROWS; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
@@ -308,6 +563,34 @@ std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
         }
     }
     return floating;
+}
+
+std::vector<std::pair<int, int>> GridManager::explodeBomb(int centerR, int centerC) {
+    std::vector<std::pair<int, int>> destroyed;
+    if (isValidCoord(centerR, centerC) && isOccupied(centerR, centerC)) {
+        destroyed.push_back({centerR, centerC});
+    }
+
+    for (const auto& nb : getNeighbors(centerR, centerC)) {
+        if (isOccupied(nb.first, nb.second)) {
+            destroyed.push_back(nb);
+        }
+    }
+    return destroyed;
+}
+
+std::vector<std::pair<int, int>> GridManager::unlockNeighbors(int r, int c) {
+    std::vector<std::pair<int, int>> unlocked;
+    for (const auto& nb : getNeighbors(r, c)) {
+        if (isOccupied(nb.first, nb.second)) {
+            Ball* b = m_grid[nb.first][nb.second];
+            if (b && b->isLocked()) {
+                b->unlock();
+                unlocked.push_back(nb);
+            }
+        }
+    }
+    return unlocked;
 }
 
 bool GridManager::isBottomReached() const {
@@ -323,7 +606,7 @@ bool GridManager::isCleared() const {
     for (int r = 0; r < ROWS; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
-            if (m_grid[r][c]) return false;
+            if (m_grid[r][c] != nullptr) return false;
         }
     }
     return true;
@@ -335,23 +618,29 @@ std::vector<BallColor> GridManager::getRemainingColors() const {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
             if (m_grid[r][c]) {
-                colors.insert(m_grid[r][c]->getColor());
+                Ball* b = m_grid[r][c];
+                BallColor col = b->getPrimaryColor();
+                if (col != BallColor::Black && col != BallColor::None) {
+                    colors.insert(col);
+                }
+                if (b->getType() == BallType::DualColor && b->getSecondaryColor() != BallColor::None) {
+                    colors.insert(b->getSecondaryColor());
+                }
             }
         }
     }
     return std::vector<BallColor>(colors.begin(), colors.end());
 }
 
-
-// ============================================================
-// FILE: ./src/core/GridManager.h
-// ============================================================
-
+======================================================================
+FILE: src\core\GridManager.h
+======================================================================
 #pragma once
+
 #include "Ball.h"
 #include <vector>
+#include <utility>
 #include <QPointF>
-#include <QSet>
 
 class GridManager {
 public:
@@ -362,14 +651,21 @@ public:
     static constexpr qreal BALL_DIAMETER = BALL_RADIUS * 2.0;
 
     GridManager();
+    ~GridManager();
+
+    // جلوگیری از کپی سطحی برای مدیریت امن حافظه
+    GridManager(const GridManager&) = delete;
+    GridManager& operator=(const GridManager&) = delete;
 
     void initGrid();
+    void clearGrid();
     void loadLevel(int levelNumber);
     void generateRandomLevel();
     void addRowFromTop();
 
     bool isOccupied(int r, int c) const;
     Ball* getBall(int r, int c);
+    const Ball* getBall(int r, int c) const;
     bool setBall(int r, int c, Ball* ball);
     void removeBall(int r, int c);
 
@@ -377,115 +673,208 @@ public:
     void getGridCoords(const QPointF& pos, int& outR, int& outC) const;
 
     std::vector<std::pair<int, int>> getNeighbors(int r, int c) const;
-    std::vector<std::pair<int, int>> findMatches(int startR, int startC, BallColor color);
-    std::vector<std::pair<int, int>> findFloatingBalls();
 
+    // الگوریتم‌های مچینگ و مکانیک‌های ویژه
+    std::vector<std::pair<int, int>> findMatches(int startR, int startC,
+                                                 BallColor color = BallColor::None,
+                                                 BallType type = BallType::Regular,
+                                                 BallColor secondaryColor = BallColor::None);
+    std::vector<std::pair<int, int>> findFloatingBalls();
+    std::vector<std::pair<int, int>> explodeBomb(int centerR, int centerC);
+    std::vector<std::pair<int, int>> unlockNeighbors(int r, int c);
+
+    // بررسی وضعیت‌های بازی
     bool isBottomReached() const;
     bool isCleared() const;
     std::vector<BallColor> getRemainingColors() const;
 
 private:
     std::vector<std::vector<Ball*>> m_grid;
+    bool isValidCoord(int r, int c) const;
+    static BallColor getStandardColor(int index);
 };
 
-
-// ============================================================
-// FILE: ./src/core/ScoreManager.cpp
-// ============================================================
-
+======================================================================
+FILE: src\core\ScoreManager.cpp
+======================================================================
 #include "ScoreManager.h"
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonArray>
-#include <QJsonObject>
+#include <QFileInfo>
+#include <QDir>
 #include <algorithm>
 
 ScoreManager::ScoreManager(const QString& filePath) : m_filePath(filePath) {
     loadScores();
 }
 
+void ScoreManager::sortRecords() {
+    std::stable_sort(m_records.begin(), m_records.end(), [](const ScoreRecord& a, const ScoreRecord& b) {
+        return a.score > b.score;
+    });
+}
+
 void ScoreManager::loadScores() {
     m_records.clear();
     QFile file(m_filePath);
-    if (!file.open(QIODevice::ReadOnly)) return;
+    if (!file.exists() || !file.open(QIODevice::ReadOnly)) {
+        return;
+    }
 
     QByteArray data = file.readAll();
     file.close();
 
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    if (!doc.isArray()) return;
+    QJsonParseError parseError;
+    QJsonDocument doc = QJsonDocument::fromJson(data, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return;
+    }
 
     QJsonArray arr = doc.array();
-    for (auto val : arr) {
-        QJsonObject obj = val.toObject();
-        ScoreRecord rec;
-        rec.username = obj["username"].toString();
-        rec.mode = obj["mode"].toString();
-        rec.score = obj["score"].toInt();
-        m_records.append(rec);
+    for (const auto& val : arr) {
+        if (val.isObject()) {
+            m_records.append(ScoreRecord::fromJson(val.toObject()));
+        }
+    }
+
+    sortRecords();
+}
+
+void ScoreManager::writeToFile() {
+    QJsonArray arr;
+    for (const auto& rec : m_records) {
+        arr.append(rec.toJson());
+    }
+
+    QFile file(m_filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        file.write(QJsonDocument(arr).toJson(QJsonDocument::Indented));
+        file.close();
     }
 }
 
 void ScoreManager::saveScore(const QString& username, const QString& mode, int score) {
-    m_records.append({username, mode, score});
-    std::sort(m_records.begin(), m_records.end(), [](const ScoreRecord& a, const ScoreRecord& b) {
-        return a.score > b.score;
-    });
+    ScoreRecord rec;
+    rec.username = username.trimmed().isEmpty() ? "Player" : username.trimmed();
+    rec.mode = mode;
+    rec.score = score;
+    rec.timestamp = QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm");
 
-    QJsonArray arr;
-    for (const auto& rec : m_records) {
-        QJsonObject obj;
-        obj["username"] = rec.username;
-        obj["mode"] = rec.mode;
-        obj["score"] = rec.score;
-        arr.append(obj);
-    }
+    saveScore(rec);
+}
 
-    QFile file(m_filePath);
-    if (file.open(QIODevice::WriteOnly)) {
-        file.write(QJsonDocument(arr).toJson());
-        file.close();
-    }
+void ScoreManager::saveScore(const ScoreRecord& record) {
+    m_records.append(record);
+    sortRecords();
+    writeToFile();
+}
+
+void ScoreManager::clearScores() {
+    m_records.clear();
+    writeToFile();
 }
 
 QVector<ScoreRecord> ScoreManager::getScores() const {
     return m_records;
 }
 
+QVector<ScoreRecord> ScoreManager::getScoresByMode(const QString& mode) const {
+    if (mode.isEmpty() || mode == "All") {
+        return m_records;
+    }
 
-// ============================================================
-// FILE: ./src/core/ScoreManager.h
-// ============================================================
+    QVector<ScoreRecord> filtered;
+    for (const auto& rec : m_records) {
+        if (rec.mode.compare(mode, Qt::CaseInsensitive) == 0) {
+            filtered.append(rec);
+        }
+    }
+    return filtered;
+}
 
+QVector<ScoreRecord> ScoreManager::getTopScores(const QString& mode, int limit) const {
+    QVector<ScoreRecord> baseList = getScoresByMode(mode);
+    if (baseList.size() > limit) {
+        baseList.resize(limit);
+    }
+    return baseList;
+}
+
+int ScoreManager::getHighestScore(const QString& mode) const {
+    auto top = getScoresByMode(mode);
+    if (top.isEmpty()) return 0;
+    return top.first().score;
+}
+
+bool ScoreManager::isHighScore(const QString& mode, int score) const {
+    if (score <= 0) return false;
+    return score > getHighestScore(mode);
+}
+
+======================================================================
+FILE: src\core\ScoreManager.h
+======================================================================
 #pragma once
+
 #include <QString>
 #include <QVector>
-#include <QPair>
+#include <QJsonObject>
+#include <QDateTime>
 
 struct ScoreRecord {
     QString username;
     QString mode;
-    int score;
+    int score = 0;
+    QString timestamp; // فرمت استاندارد: YYYY-MM-DD HH:MM
+
+    QJsonObject toJson() const {
+        QJsonObject obj;
+        obj["username"] = username;
+        obj["mode"] = mode;
+        obj["score"] = score;
+        obj["timestamp"] = timestamp.isEmpty() ? QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm") : timestamp;
+        return obj;
+    }
+
+    static ScoreRecord fromJson(const QJsonObject& obj) {
+        ScoreRecord rec;
+        rec.username = obj["username"].toString("Unknown");
+        rec.mode = obj["mode"].toString("Classic");
+        rec.score = obj["score"].toInt(0);
+        rec.timestamp = obj["timestamp"].toString(QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm"));
+        return rec;
+    }
 };
 
 class ScoreManager {
 public:
-    ScoreManager(const QString& filePath = "scores.json");
+    explicit ScoreManager(const QString& filePath = "scores.json");
 
     void loadScores();
     void saveScore(const QString& username, const QString& mode, int score);
+    void saveScore(const ScoreRecord& record);
+    void clearScores();
+
+    // متدهای تحلیلی و دسترسی به رکوردها
     QVector<ScoreRecord> getScores() const;
+    QVector<ScoreRecord> getScoresByMode(const QString& mode) const;
+    QVector<ScoreRecord> getTopScores(const QString& mode = "", int limit = 10) const;
+
+    int getHighestScore(const QString& mode = "") const;
+    bool isHighScore(const QString& mode, int score) const;
 
 private:
     QString m_filePath;
     QVector<ScoreRecord> m_records;
+
+    void writeToFile();
+    void sortRecords();
 };
 
-
-// ============================================================
-// FILE: ./src/core/SoundManager.cpp
-// ============================================================
-
+======================================================================
+FILE: src\core\SoundManager.cpp
+======================================================================
 #include "SoundManager.h"
 #include <QCoreApplication>
 #include <QDir>
@@ -585,10 +974,9 @@ void SoundManager::playBounce() { playSfx("bounce.wav"); }
 void SoundManager::playGameOver() { playSfx("gameover.wav"); }
 void SoundManager::playWin() { playSfx("win.wav"); }
 
-// ============================================================
-// FILE: ./src/core/SoundManager.h
-// ============================================================
-
+======================================================================
+FILE: src\core\SoundManager.h
+======================================================================
 #pragma once
 #include <QObject>
 #include <QMediaPlayer>
@@ -629,15 +1017,16 @@ private:
     QMap<QString, QSoundEffect*> m_sfxEffects;
 };
 
-// ============================================================
-// FILE: ./src/gameplay/AimLineItem.cpp
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\AimLineItem.cpp
+======================================================================
 #include "AimLineItem.h"
 #include <cmath>
 
-AimLineItem::AimLineItem(qreal sceneWidth, qreal sceneHeight)
-    : m_sceneWidth(sceneWidth), m_sceneHeight(sceneHeight) {}
+AimLineItem::AimLineItem(qreal sceneWidth, qreal sceneHeight, qreal ballRadius)
+        : m_sceneWidth(sceneWidth), m_sceneHeight(sceneHeight), m_ballRadius(ballRadius) {
+    setZValue(10); // قرارگیری روی تمام توپ‌ها برای دیده‌شدن خط نشانه
+}
 
 QRectF AimLineItem::boundingRect() const {
     return QRectF(0, 0, m_sceneWidth, m_sceneHeight);
@@ -649,12 +1038,26 @@ void AimLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* optio
     if (m_points.size() < 2) return;
 
     painter->setRenderHint(QPainter::Antialiasing);
-    QPen pen(QColor(255, 255, 255, 180), 3, Qt::DashLine);
+
+    // خط‌چین نئونی با شفافیت ملایم
+    QPen pen(QColor(241, 245, 249, 180), 2.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
     painter->setPen(pen);
 
     for (int i = 0; i < m_points.size() - 1; ++i) {
         painter->drawLine(m_points[i], m_points[i + 1]);
     }
+
+    // رسم دایره کوچک در انتهای مسیر برای نمایش نقطه فرود
+    if (!m_points.isEmpty()) {
+        painter->setPen(Qt::NoPen);
+        painter->setBrush(QColor(56, 189, 248, 200));
+        painter->drawEllipse(m_points.last(), 4.0, 4.0);
+    }
+}
+
+void AimLineItem::clearAim() {
+    m_points.clear();
+    update();
 }
 
 void AimLineItem::updateAim(const QPointF& startPos, qreal angleDeg) {
@@ -666,31 +1069,35 @@ void AimLineItem::updateAim(const QPointF& startPos, qreal angleDeg) {
     qreal dy = -std::sin(rad);
 
     QPointF current = startPos;
-    for (int bounce = 0; bounce < 2; ++bounce) {
-        // Raycast to walls
-        qreal targetX = (dx > 0) ? (m_sceneWidth - 22) : 22;
-        qreal tX = (dx != 0) ? (targetX - current.x()) / dx : 1e9;
-        qreal tY = (dy < 0) ? (22 - current.y()) / dy : 1e9;
+    const int maxBounces = 2; // حداکثر ۲ بار بازتاب از دیوارها
 
-        if (tX < tY && tX > 0) {
+    for (int bounce = 0; bounce <= maxBounces; ++bounce) {
+        qreal targetX = (dx > 0) ? (m_sceneWidth - m_ballRadius) : m_ballRadius;
+        qreal tX = (std::abs(dx) > 1e-6) ? (targetX - current.x()) / dx : 1e9;
+        qreal tY = (dy < 0) ? (m_ballRadius - current.y()) / dy : 1e9;
+
+        if (tX > 0 && tX < tY) {
+            // برخورد با دیواره جانبی و بازتاب بردار افقی
             current += QPointF(dx * tX, dy * tX);
             m_points.append(current);
-            dx = -dx; // Wall reflection
+            dx = -dx;
         } else if (tY > 0) {
+            // برخورد با سقف زمین بازی
             current += QPointF(dx * tY, dy * tY);
             m_points.append(current);
+            break;
+        } else {
             break;
         }
     }
     update();
 }
 
-
-// ============================================================
-// FILE: ./src/gameplay/AimLineItem.h
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\AimLineItem.h
+======================================================================
 #pragma once
+
 #include <QGraphicsItem>
 #include <QPainter>
 #include <QVector>
@@ -698,31 +1105,91 @@ void AimLineItem::updateAim(const QPointF& startPos, qreal angleDeg) {
 
 class AimLineItem : public QGraphicsItem {
 public:
-    AimLineItem(qreal sceneWidth, qreal sceneHeight);
+    AimLineItem(qreal sceneWidth, qreal sceneHeight, qreal ballRadius = 22.0);
 
     QRectF boundingRect() const override;
-    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
+    // محاسبه مسیر پرتو با قابلیت بازتاب از دیواره‌های چپ و راست
     void updateAim(const QPointF& startPos, qreal angleDeg);
+    void clearAim();
 
 private:
     qreal m_sceneWidth;
     qreal m_sceneHeight;
+    qreal m_ballRadius;
     QVector<QPointF> m_points;
 };
 
-
-// ============================================================
-// FILE: ./src/gameplay/CannonItem.cpp
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\CannonItem.cpp
+======================================================================
 #include "CannonItem.h"
 #include <QRadialGradient>
+#include <cmath>
 
-CannonItem::CannonItem(qreal width, qreal height) : m_width(width), m_height(height) {}
+CannonItem::CannonItem(qreal width, qreal height)
+        : m_sceneWidth(width), m_sceneHeight(height) {
+    setZValue(20); // لوله توپ بالاتر از گوی‌ها قرار می‌گیرد
+}
 
 QRectF CannonItem::boundingRect() const {
-    return QRectF(-60, -60, 120, 120);
+    return QRectF(-100, -70, 200, 140);
+}
+
+void CannonItem::setAngle(qreal angleDeg) {
+    m_angle = angleDeg;
+    update();
+}
+
+void CannonItem::setCurrentBall(BallColor color, BallType type) {
+    m_currentColor = color;
+    m_currentType = type;
+    update();
+}
+
+void CannonItem::setNextBall(BallColor color, BallType type) {
+    m_nextColor = color;
+    m_nextType = type;
+    update();
+}
+
+void CannonItem::swapBalls() {
+    std::swap(m_currentColor, m_nextColor);
+    std::swap(m_currentType, m_nextType);
+    update();
+}
+
+void CannonItem::drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type) {
+    painter->save();
+
+    QColor baseCol = Ball::toQColor(color);
+    if (type == BallType::Rainbow) baseCol = QColor(255, 230, 0);
+    else if (type == BallType::Bomb) baseCol = QColor(231, 76, 60);
+    else if (type == BallType::Laser) baseCol = QColor(0, 210, 211);
+
+    // گرادیان کروی سه‌بعدی
+    QRadialGradient grad(center.x() - radius * 0.3, center.y() - radius * 0.3, radius * 1.3);
+    grad.setColorAt(0.0, QColor(255, 255, 255, 230));
+    grad.setColorAt(0.35, baseCol);
+    grad.setColorAt(1.0, baseCol.darker(200));
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(grad);
+    painter->drawEllipse(center, radius, radius);
+
+    // علامت‌گذاری بصری برای توپ‌های خاص
+    if (type == BallType::Bomb) {
+        painter->setPen(QPen(Qt::black, 2));
+        painter->setBrush(Qt::black);
+        painter->drawEllipse(center, radius * 0.35, radius * 0.35);
+    } else if (type == BallType::Rainbow) {
+        painter->setPen(QPen(Qt::white, 2, Qt::DotLine));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawEllipse(center, radius * 0.6, radius * 0.6);
+    }
+
+    painter->restore();
 }
 
 void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
@@ -730,155 +1197,180 @@ void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     Q_UNUSED(widget);
     painter->setRenderHint(QPainter::Antialiasing);
 
-    // Glowing Base
-    QRadialGradient baseGlow(0, 0, 45);
+    // ۱. پایه شلیک (Base Glow)
+    QRadialGradient baseGlow(0, 0, 48);
     baseGlow.setColorAt(0.0, QColor(30, 41, 59));
-    baseGlow.setColorAt(0.8, QColor(15, 23, 42));
-    baseGlow.setColorAt(1.0, QColor(56, 189, 248, 200));
+    baseGlow.setColorAt(0.7, QColor(15, 23, 42));
+    baseGlow.setColorAt(1.0, QColor(56, 189, 248, 180));
 
     painter->setBrush(baseGlow);
     painter->setPen(QPen(QColor(56, 189, 248), 2));
-    painter->drawEllipse(-40, -40, 80, 80);
+    painter->drawEllipse(QPointF(0, 0), 40, 40);
 
-    // Modern Cannon Barrel
+    // ۲. لوله گردان توپ (Rotating Barrel)
     painter->save();
-    painter->rotate(-m_angle + 90);
+    painter->rotate(-m_angle + 90.0);
     painter->setBrush(QBrush(QColor(51, 65, 85)));
     painter->setPen(QPen(QColor(148, 163, 184), 1.5));
-    painter->drawRoundedRect(-14, -50, 28, 50, 8, 8);
+    painter->drawRoundedRect(-13, -52, 26, 52, 6, 6);
     painter->restore();
 
-    // 3D Spherical Loaded Ball
-    QRadialGradient ballGrad(-5, -5, 20);
-    QColor ballCol = Ball::toQColor(m_currentBall);
-    ballGrad.setColorAt(0.0, QColor(255, 255, 255, 220));
-    ballGrad.setColorAt(0.4, ballCol);
-    ballGrad.setColorAt(1.0, ballCol.darker(180));
+    // ۳. گلوله آماده شلیک در مرکز
+    drawBall(painter, QPointF(0, 0), 18.0, m_currentColor, m_currentType);
 
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(ballGrad);
-    painter->drawEllipse(-18, -18, 36, 36);
+    // ۴. حلقه و گلوله بعدی در خشاب (Next Ball Preview)
+    painter->setPen(QPen(QColor(148, 163, 184, 120), 1.5, Qt::DashLine));
+    painter->setBrush(QColor(15, 23, 42, 160));
+    painter->drawEllipse(QPointF(-65, 0), 18, 18);
 
-    // Next Ball Preview Ring
-    painter->setPen(QPen(QColor(148, 163, 184, 150), 1, Qt::DashLine));
-    painter->setBrush(Qt::NoBrush);
-    painter->drawEllipse(-85, -15, 28, 28);
-
-    QRadialGradient nextGrad(-71, -1, 14);
-    QColor nextCol = Ball::toQColor(m_nextBall);
-    nextGrad.setColorAt(0.0, QColor(255, 255, 255, 200));
-    nextGrad.setColorAt(0.4, nextCol);
-    nextGrad.setColorAt(1.0, nextCol.darker(180));
-
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(nextGrad);
-    painter->drawEllipse(-83, -13, 24, 24);
+    drawBall(painter, QPointF(-65, 0), 13.0, m_nextColor, m_nextType);
 }
 
-void CannonItem::setAngle(qreal angleDeg) { m_angle = angleDeg; update(); }
-void CannonItem::setCurrentBall(BallColor c) { m_currentBall = c; update(); }
-void CannonItem::setNextBall(BallColor c) { m_nextBall = c; update(); }
-void CannonItem::swapBalls() { std::swap(m_currentBall, m_nextBall); update(); }
-
-// ============================================================
-// FILE: ./src/gameplay/CannonItem.h
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\CannonItem.h
+======================================================================
 #pragma once
+
 #include <QGraphicsItem>
 #include <QPainter>
 #include "../core/Ball.h"
 
 class CannonItem : public QGraphicsItem {
 public:
-    CannonItem(qreal width, qreal height);
+    CannonItem(qreal width = 352.0, qreal height = 600.0);
 
     QRectF boundingRect() const override;
-    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void setAngle(qreal angleDeg);
     qreal getAngle() const { return m_angle; }
 
-    void setCurrentBall(BallColor c);
-    BallColor getCurrentBall() const { return m_currentBall; }
-    void setNextBall(BallColor c);
-    BallColor getNextBall() const { return m_nextBall; }
+    // تنظیم گلوله آماده شلیک
+    void setCurrentBall(BallColor color, BallType type = BallType::Regular);
+    BallColor getCurrentColor() const { return m_currentColor; }
+    BallType getCurrentType() const { return m_currentType; }
+
+    // تنظیم گلوله بعدی در خشاب
+    void setNextBall(BallColor color, BallType type = BallType::Regular);
+    BallColor getNextColor() const { return m_nextColor; }
+    BallType getNextType() const { return m_nextType; }
+
+    // جابجایی سریع دو گلوله با کلید Space
     void swapBalls();
 
 private:
-    qreal m_width;
-    qreal m_height;
+    qreal m_sceneWidth;
+    qreal m_sceneHeight;
     qreal m_angle = 90.0;
-    BallColor m_currentBall = BallColor::RED;
-    BallColor m_nextBall = BallColor::BLUE;
+
+    BallColor m_currentColor = BallColor::Red;
+    BallType m_currentType = BallType::Regular;
+
+    BallColor m_nextColor = BallColor::Blue;
+    BallType m_nextType = BallType::Regular;
+
+    void drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type);
 };
 
-
-// ============================================================
-// FILE: ./src/gameplay/GameScene.cpp
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\GameScene.cpp
+======================================================================
 #include "GameScene.h"
 #include "../core/SoundManager.h"
-#include <QRandomGenerator>
 #include <QGraphicsSceneMouseEvent>
 #include <QKeyEvent>
+#include <QRandomGenerator>
 #include <cmath>
 
 GameScene::GameScene(const QString& username, const QString& mode, QObject* parent)
-    : QGraphicsScene(0, 0, 352, 600, parent), m_username(username), m_mode(mode) {
-    setBackgroundBrush(QBrush(QColor(30, 39, 46)));
+        : QGraphicsScene(0, 0, 352, 600, parent),
+          m_username(username),
+          m_mode(mode) {
 
-    if (m_mode == "Random" || m_mode == "Endless") {
-        m_grid.generateRandomLevel();
-    } else {
-        m_grid.loadLevel(1);
+    // رنگ پس‌زمینه اختصاصی محیط نبرد
+    setBackgroundBrush(QBrush(QColor(15, 23, 42)));
+
+    initGame();
+}
+
+GameScene::~GameScene() {
+    if (m_gameLoopTimer) {
+        m_gameLoopTimer->stop();
     }
+}
 
-    m_aimLine = new AimLineItem(352, 600);
+void GameScene::initGame() {
+    // ۱. چیدمان اولیه مرحله کلاسیک
+    m_grid.loadLevel(1);
+
+    // ۲. ایجاد و افزودن خط نشانه‌گیری بازتابی
+    m_aimLine = new AimLineItem(352, 600, GridManager::BALL_RADIUS);
     addItem(m_aimLine);
 
+    // ۳. ایجاد و موقعیت‌دهی لوله پرتاب‌کننده توپ
     m_cannon = new CannonItem(352, 600);
-    m_cannon->setPos(176, 550);
+    m_cannon->setPos(176, 545);
     addItem(m_cannon);
 
+    // ۴. پر کردن خشاب اولیه کانن با رنگ‌های موجود در زمین
+    prepareNextCannonBall();
+    m_cannon->swapBalls();
+    prepareNextCannonBall();
+
+    // ۵. ایجاد آیتم گرافیکی برای نمایش گلوله در حال پرواز
+    m_flyingBallItem = addEllipse(0, 0, GridManager::BALL_DIAMETER, GridManager::BALL_DIAMETER);
+    m_flyingBallItem->setZValue(15);
+    m_flyingBallItem->setVisible(false);
+
+    // ۶. راه‌اندازی تایمر حلقه فیزیک بازی (۶۰ فریم بر ثانیه)
     m_gameLoopTimer = new QTimer(this);
     connect(m_gameLoopTimer, &QTimer::timeout, this, &GameScene::updateGameLoop);
     m_gameLoopTimer->start(16);
 
-    if (m_mode == "Time") {
-        m_countdownTimer = new QTimer(this);
-        connect(m_countdownTimer, &QTimer::timeout, this, &GameScene::onCountdownTimer);
-        m_countdownTimer->start(1000);
-    }
-
-    if (m_mode == "Endless") {
-        m_rowPushTimer = new QTimer(this);
-        connect(m_rowPushTimer, &QTimer::timeout, this, &GameScene::onRowTimer);
-        m_rowPushTimer->start(15000);
-    }
-
+    // ۷. رندر اولیه شبکه گوی‌ها
     redrawGrid();
+}
+
+void GameScene::prepareNextCannonBall() {
+    auto availableColors = m_grid.getRemainingColors();
+    BallColor chosenColor = BallColor::Red;
+
+    if (!availableColors.empty()) {
+        int idx = QRandomGenerator::global()->bounded(static_cast<int>(availableColors.size()));
+        chosenColor = availableColors[idx];
+    } else {
+        chosenColor = Ball::getRandomColor(5);
+    }
+
+    m_cannon->setNextBall(chosenColor, BallType::Regular);
 }
 
 void GameScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     if (m_isPaused) return;
+
     QPointF mousePos = event->scenePos();
     QPointF cannonPos = m_cannon->pos();
+
+    // محاسبه زاویه پرتاب نسبت به موقعیت ماوس
     qreal angle = std::atan2(cannonPos.y() - mousePos.y(), mousePos.x() - cannonPos.x()) * 180.0 / M_PI;
-    if (angle < 15) angle = 15;
-    if (angle > 165) angle = 165;
+    angle = std::clamp(angle, 15.0, 165.0);
 
     m_cannon->setAngle(angle);
-    m_aimLine->updateAim(cannonPos, angle);
+
+    if (!m_isFlying) {
+        m_aimLine->updateAim(cannonPos, angle);
+    }
+
     QGraphicsScene::mouseMoveEvent(event);
 }
 
 void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     if (m_isPaused || m_isFlying) return;
+
     if (event->button() == Qt::LeftButton) {
         fireBall();
     }
+
     QGraphicsScene::mousePressEvent(event);
 }
 
@@ -895,85 +1387,147 @@ void GameScene::keyPressEvent(QKeyEvent* event) {
 
 void GameScene::fireBall() {
     m_isFlying = true;
-    m_flyingColor = m_cannon->getCurrentBall();
+    m_aimLine->clearAim();
+
+    m_flyingColor = m_cannon->getCurrentColor();
+    m_flyingType = m_cannon->getCurrentType();
     m_flyingPos = m_cannon->pos();
 
+    // محاسبه بردار سرعت
     qreal rad = m_cannon->getAngle() * M_PI / 180.0;
-    qreal speed = 14.0;
+    qreal speed = 15.0; // سرعت پیمایش گلوله در فریم
     m_flyingVel = QPointF(std::cos(rad) * speed, -std::sin(rad) * speed);
 
-    auto remaining = m_grid.getRemainingColors();
-    BallColor nextCol = remaining.empty() ? Ball::getRandomColor(5) : remaining[QRandomGenerator::global()->bounded((int)remaining.size())];
-    m_cannon->setCurrentBall(m_cannon->getNextBall());
-    m_cannon->setNextBall(nextCol);
+    // آماده‌سازی ظاهر گلوله پرنده
+    m_flyingBallItem->setRect(-GridManager::BALL_RADIUS, -GridManager::BALL_RADIUS,
+                              GridManager::BALL_DIAMETER, GridManager::BALL_DIAMETER);
+    m_flyingBallItem->setPos(m_flyingPos);
+    m_flyingBallItem->setPen(Qt::NoPen);
+    m_flyingBallItem->setBrush(Ball::toQColor(m_flyingColor));
+    m_flyingBallItem->setVisible(true);
+
+    // به‌روزرسانی گلوله‌های لوله و خشاب
+    m_cannon->setCurrentBall(m_cannon->getNextColor(), m_cannon->getNextType());
+    prepareNextCannonBall();
     m_shotsFired++;
 
     SoundManager::instance().playShoot();
 }
 
 void GameScene::updateGameLoop() {
-    if (m_isPaused) return;
+    if (m_isPaused || !m_isFlying) return;
 
-    if (m_isFlying) {
-        m_flyingPos += m_flyingVel;
-        // Wall Bounce
-        if (m_flyingPos.x() <= 22 || m_flyingPos.x() >= 352 - 22) {
-            m_flyingVel.setX(-m_flyingVel.x());
-        }
+    m_flyingPos += m_flyingVel;
 
-        // Top hit or ball collision check
-        bool collided = false;
-        if (m_flyingPos.y() <= 22) {
-            collided = true;
-        } else {
-            for (int r = 0; r < GridManager::ROWS; ++r) {
-                int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
-                for (int c = 0; c < cols; ++c) {
-                    if (m_grid.isOccupied(r, c)) {
-                        QPointF center = m_grid.getCenterPos(r, c);
-                        qreal dist = std::hypot(center.x() - m_flyingPos.x(), center.y() - m_flyingPos.y());
-                        if (dist < GridManager::BALL_DIAMETER * 0.9) {
-                            collided = true;
-                            break;
-                        }
+    // ۱. بازتاب از دیواره‌های چپ و راست
+    if (m_flyingPos.x() <= GridManager::BALL_RADIUS) {
+        m_flyingPos.setX(GridManager::BALL_RADIUS);
+        m_flyingVel.setX(-m_flyingVel.x());
+    } else if (m_flyingPos.x() >= 352.0 - GridManager::BALL_RADIUS) {
+        m_flyingPos.setX(352.0 - GridManager::BALL_RADIUS);
+        m_flyingVel.setX(-m_flyingVel.x());
+    }
+
+    // ۲. بررسی برخورد با سقف یا توپ‌های چیده شده در ماتریس
+    bool collided = false;
+
+    // برخورد با سقف
+    if (m_flyingPos.y() <= GridManager::BALL_RADIUS) {
+        collided = true;
+    } else {
+        // برخورد با توپ‌های موجود در زمین
+        for (int r = 0; r < GridManager::ROWS; ++r) {
+            int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                if (m_grid.isOccupied(r, c)) {
+                    QPointF center = m_grid.getCenterPos(r, c);
+                    qreal dist = std::hypot(center.x() - m_flyingPos.x(), center.y() - m_flyingPos.y());
+
+                    // آستانه برخورد شعاعی دو دایره (با ضریب ایمنی ۰.۸۸ برای اسنپ طبیعی)
+                    if (dist <= GridManager::BALL_DIAMETER * 0.88) {
+                        collided = true;
+                        break;
                     }
                 }
-                if (collided) break;
             }
-        }
-
-        if (collided) {
-            m_isFlying = false;
-            snapBallToGrid(m_flyingPos, m_flyingColor);
+            if (collided) break;
         }
     }
+
+    // ۳. متوقف کردن پرواز و جایگذاری در شبکه
+    if (collided) {
+        m_isFlying = false;
+        m_flyingBallItem->setVisible(false);
+        snapBallToGrid(m_flyingPos, m_flyingColor, m_flyingType);
+    } else {
+        m_flyingBallItem->setPos(m_flyingPos);
+    }
+
     update();
 }
 
-void GameScene::snapBallToGrid(const QPointF& pos, BallColor color) {
-    int r, c;
-    m_grid.getGridCoords(pos, r, c);
-    m_grid.setBall(r, c, new Ball(color, r, c));
-    popMatches(r, c, color);
-    checkFloatingBalls();
-    redrawGrid();
+bool GameScene::findBestSnapSlot(const QPointF& hitPos, int& outR, int& outC) {
+    int approxR, approxC;
+    m_grid.getGridCoords(hitPos, approxR, approxC);
 
-    if (m_grid.isBottomReached()) {
-        SoundManager::instance().playGameOver();
-        emit gameOver(m_score);
-    } else if (m_grid.isCleared()) {
-        SoundManager::instance().playWin();
-        emit gameWon(m_score);
+    // اگر مستقیم در یک خانه خالی بود
+    if (!m_grid.isOccupied(approxR, approxC)) {
+        outR = approxR;
+        outC = approxC;
+        return true;
+    }
+
+    // در غیر این صورت نزدیک‌ترین خانه خالی مجاور را پیدا می‌کنیم
+    qreal minDistance = 1e9;
+    bool found = false;
+
+    for (int r = 0; r < GridManager::ROWS; ++r) {
+        int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (!m_grid.isOccupied(r, c)) {
+                QPointF center = m_grid.getCenterPos(r, c);
+                qreal dist = std::hypot(center.x() - hitPos.x(), center.y() - hitPos.y());
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    outR = r;
+                    outC = c;
+                    found = true;
+                }
+            }
+        }
+    }
+    return found;
+}
+
+void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType type) {
+    int r = 0, c = 0;
+    if (findBestSnapSlot(hitPos, r, c)) {
+        auto* newBall = new Ball(color, type, BallColor::None, r, c);
+        m_grid.setBall(r, c, newBall);
+
+        // اجرای الگوریتم ترکیدن و ریزش
+        popMatches(r, c, color, type);
+        checkFloatingBalls();
+        redrawGrid();
+
+        // بررسی شرایط پایان بازی
+        if (m_grid.isBottomReached()) {
+            SoundManager::instance().playGameOver();
+            emit gameOver(m_score);
+        } else if (m_grid.isCleared()) {
+            SoundManager::instance().playWin();
+            emit gameWon(m_score);
+        }
     }
 }
 
-void GameScene::popMatches(int r, int c, BallColor color) {
-    auto matches = m_grid.findMatches(r, c, color);
+void GameScene::popMatches(int r, int c, BallColor color, BallType type) {
+    auto matches = m_grid.findMatches(r, c, color, type);
     if (!matches.empty()) {
         SoundManager::instance().playPop();
-        for (auto p : matches) {
+        for (const auto& p : matches) {
             m_grid.removeBall(p.first, p.second);
-            m_score += 20;
+            m_score += 20; // ۲۰ امتیاز به ازای هر توپ در زنجیره
         }
         emit scoreChanged(m_score);
     }
@@ -981,19 +1535,19 @@ void GameScene::popMatches(int r, int c, BallColor color) {
 
 void GameScene::checkFloatingBalls() {
     auto floating = m_grid.findFloatingBalls();
-    for (auto p : floating) {
-        m_grid.removeBall(p.first, p.second);
-        m_score += 40;
-    }
     if (!floating.empty()) {
+        for (const auto& p : floating) {
+            m_grid.removeBall(p.first, p.second);
+            m_score += 40; // ۴۰ امتیاز جایزه به ازای هر توپ افتاده
+        }
         emit scoreChanged(m_score);
     }
 }
 
 void GameScene::redrawGrid() {
-    // Clear old ball items except cannon and aim
-    for (auto item : items()) {
-        if (item != m_cannon && item != m_aimLine) {
+    // پاک کردن گوی‌های قبلی شبکه بدون حذف لوله، خط نشانه و گلوله متحرک
+    for (auto* item : items()) {
+        if (item != m_cannon && item != m_aimLine && item != m_flyingBallItem) {
             removeItem(item);
             delete item;
         }
@@ -1003,62 +1557,56 @@ void GameScene::redrawGrid() {
         int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
         for (int c = 0; c < cols; ++c) {
             if (m_grid.isOccupied(r, c)) {
+                const Ball* b = m_grid.getBall(r, c);
                 QPointF center = m_grid.getCenterPos(r, c);
-                auto ellipse = addEllipse(center.x() - 20, center.y() - 20, 40, 40,
-                    Qt::NoPen, QBrush(Ball::toQColor(m_grid.getBall(r, c)->getColor())));
+
+                auto* ellipse = addEllipse(center.x() - GridManager::BALL_RADIUS,
+                                           center.y() - GridManager::BALL_RADIUS,
+                                           GridManager::BALL_DIAMETER,
+                                           GridManager::BALL_DIAMETER,
+                                           Qt::NoPen,
+                                           QBrush(b->getDisplayColor()));
                 ellipse->setZValue(1);
             }
         }
     }
 }
 
-void GameScene::onRowTimer() {
-    m_grid.addRowFromTop();
-    redrawGrid();
-    if (m_grid.isBottomReached()) {
-        emit gameOver(m_score);
-    }
+void GameScene::pauseGame() {
+    m_isPaused = true;
+    if (m_aimLine) m_aimLine->clearAim();
 }
 
-void GameScene::onCountdownTimer() {
-    m_timeLeft--;
-    emit timeChanged(m_timeLeft);
-    if (m_timeLeft <= 0) {
-        m_countdownTimer->stop();
-        emit gameOver(m_score);
-    }
+void GameScene::resumeGame() {
+    m_isPaused = false;
 }
 
-void GameScene::pauseGame() { m_isPaused = true; }
-void GameScene::resumeGame() { m_isPaused = false; }
-
-
-// ============================================================
-// FILE: ./src/gameplay/GameScene.h
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\GameScene.h
+======================================================================
 #pragma once
+
 #include <QGraphicsScene>
 #include <QTimer>
+#include <QGraphicsEllipseItem>
 #include "../core/GridManager.h"
 #include "CannonItem.h"
 #include "AimLineItem.h"
 
 class GameScene : public QGraphicsScene {
-    Q_OBJECT
+Q_OBJECT
 public:
-    GameScene(const QString& username, const QString& mode, QObject* parent = nullptr);
+    explicit GameScene(const QString& username, const QString& mode = "Classic", QObject* parent = nullptr);
+    ~GameScene() override;
 
     void pauseGame();
     void resumeGame();
     int getScore() const { return m_score; }
-    int getTimeLeft() const { return m_timeLeft; }
 
 signals:
     void gameWon(int score);
     void gameOver(int score);
     void scoreChanged(int score);
-    void timeChanged(int timeLeft);
     void pauseRequested();
 
 protected:
@@ -1068,88 +1616,94 @@ protected:
 
 private slots:
     void updateGameLoop();
-    void onRowTimer();
-    void onCountdownTimer();
 
 private:
+    void initGame();
     void fireBall();
-    void snapBallToGrid(const QPointF& pos, BallColor color);
-    void popMatches(int r, int c, BallColor color);
+    void snapBallToGrid(const QPointF& hitPos, BallColor color, BallType type);
+    void popMatches(int r, int c, BallColor color, BallType type);
     void checkFloatingBalls();
     void redrawGrid();
+    void prepareNextCannonBall();
+    bool findBestSnapSlot(const QPointF& hitPos, int& outR, int& outC);
 
     QString m_username;
     QString m_mode;
     GridManager m_grid;
-    CannonItem* m_cannon;
-    AimLineItem* m_aimLine;
 
-    QTimer* m_gameLoopTimer;
-    QTimer* m_rowPushTimer;
-    QTimer* m_countdownTimer;
+    CannonItem* m_cannon = nullptr;
+    AimLineItem* m_aimLine = nullptr;
+    QTimer* m_gameLoopTimer = nullptr;
 
+    // متغیرهای فیزیک پرتابه فعال
     bool m_isFlying = false;
     QPointF m_flyingPos;
     QPointF m_flyingVel;
-    BallColor m_flyingColor;
+    BallColor m_flyingColor = BallColor::Red;
+    BallType m_flyingType = BallType::Regular;
+    QGraphicsEllipseItem* m_flyingBallItem = nullptr;
 
     int m_score = 0;
-    int m_timeLeft = 120;
     int m_shotsFired = 0;
     bool m_isPaused = false;
 };
 
-
-// ============================================================
-// FILE: ./src/gameplay/GameView.cpp
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\GameView.cpp
+======================================================================
 #include "GameView.h"
+#include <QPainter>
 
 GameView::GameView(QWidget* parent) : QGraphicsView(parent) {
+    // حذف اسکرول‌بارهای افقی و عمودی
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    setRenderHint(QPainter::Antialiasing);
-    setFixedSize(356, 604);
+
+    // بهینه‌سازی رندرر با تکنیک‌های ضدپلگی و نرم‌سازی
+    setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform | QPainter::TextAntialiasing);
+
+    // حذف کادر پیش‌فرض خاکستری ویجت برای یکپارچگی ظاهری با تم تاریک
+    setFrameShape(QFrame::NoFrame);
+    setStyleSheet("background: transparent; border: none;");
+
+    // فعال‌سازی رهگیری بلادرنگ ماوس (بسیار مهم برای چرخش پیوسته توپ و رسم خط نشانه بدون نگه داشتن کلیک)
+    setMouseTracking(true);
+
+    // دریافت فوکوس کیبورد برای عملکرد دکمه Space (جابجایی گلوله) و Escape (منوی توقف)
+    setFocusPolicy(Qt::StrongFocus);
+
+    // حالت به‌روزرسانی هوشمند فریم‌ها برای جلوگیری از افت فریم
+    setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 }
 
+void GameView::resizeEvent(QResizeEvent* event) {
+    QGraphicsView::resizeEvent(event);
+    if (scene()) {
+        // فیت نگه‌داشتن همیشگی مختصات صحنه ۳۵۲x۶۰۰ با حفظ نسبت ابعاد در تغییر سایز یا تمام‌صفحه
+        fitInView(scene()->sceneRect(), Qt::KeepAspectRatio);
+    }
+}
 
-// ============================================================
-// FILE: ./src/gameplay/GameView.h
-// ============================================================
-
+======================================================================
+FILE: src\gameplay\GameView.h
+======================================================================
 #pragma once
+
 #include <QGraphicsView>
+#include <QResizeEvent>
 
 class GameView : public QGraphicsView {
-    Q_OBJECT
+Q_OBJECT
 public:
-    GameView(QWidget* parent = nullptr);
+    explicit GameView(QWidget* parent = nullptr);
+
+protected:
+    void resizeEvent(QResizeEvent* event) override;
 };
 
-
-// ============================================================
-// FILE: ./src/main.cpp
-// ============================================================
-
-#include <QApplication>
-#include "ui/MainWindow.h"
-#include "ui/ThemeManager.h"
-
-int main(int argc, char *argv[]) {
-    QApplication app(argc, argv);
-    app.setStyleSheet(ThemeManager::getMasterStyleSheet());
-
-    MainWindow window;
-    window.show();
-
-    return app.exec();
-}
-
-// ============================================================
-// FILE: ./src/ui/AdvancedSettingsWidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\AdvancedSettingsWidget.cpp
+======================================================================
 #include "AdvancedSettingsWidget.h"
 #include <QPainter>
 #include <QPainterPath>
@@ -1962,10 +2516,9 @@ void AdvancedSettingsWidget::renderDisplayGearbox(QPainter& painter) {
     painter.restore(); 
 }
 
-// ============================================================
-// FILE: ./src/ui/AdvancedSettingsWidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\AdvancedSettingsWidget.h
+======================================================================
 #pragma once
 #include <QWidget>
 #include <QTimer>
@@ -2108,10 +2661,9 @@ private:
     int m_currentFpsIndex = 1;
 };
 
-// ============================================================
-// FILE: ./src/ui/GameOverDialog.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\GameOverDialog.cpp
+======================================================================
 #include "GameOverDialog.h"
 #include <QVBoxLayout>
 #include <QLabel>
@@ -2144,10 +2696,9 @@ GameOverDialog::GameOverDialog(bool won, const QString& username, int score, QWi
 }
 
 
-// ============================================================
-// FILE: ./src/ui/GameOverDialog.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\GameOverDialog.h
+======================================================================
 #pragma once
 #include <QDialog>
 #include <QString>
@@ -2162,10 +2713,9 @@ signals:
 };
 
 
-// ============================================================
-// FILE: ./src/ui/MainMenuWidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\MainMenuWidget.cpp
+======================================================================
 #include "MainMenuWidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -2478,10 +3028,9 @@ void MainMenuWidget::paintEvent(QPaintEvent* event) {
     }
 }
 
-// ============================================================
-// FILE: ./src/ui/MainMenuWidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\MainMenuWidget.h
+======================================================================
 #pragma once
 #include <QWidget>
 #include <QPushButton>
@@ -2543,15 +3092,15 @@ private:
     qreal m_time = 0.0;
 };
 
-// ============================================================
-// FILE: ./src/ui/MainWindow.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\MainWindow.cpp
+======================================================================
 #include "MainWindow.h"
 #include "PauseDialog.h"
 #include "GameOverDialog.h"
 #include <QStatusBar>
 #include <QKeyEvent>
+#include "../core/SoundManager.h"
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
@@ -2568,7 +3117,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_startMenu = new StartGameWidget(this);
     m_settingsWidget = new SettingsWidget(this);
     m_scoreboardWidget = new ScoreboardWidget(&m_scoreManager, this);
-    m_advSettingsWidget = new AdvancedSettingsWidget(this); // <--- ساخته شد
+    m_advSettingsWidget = new AdvancedSettingsWidget(this); 
 
     // اضافه کردن به StackedWidget
     m_stackedWidget->addWidget(m_mainMenu);          // Index 0
@@ -2616,6 +3165,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             showNormal();
         }
     });
+    
+    // ===> ۲. این خط اضافه شد تا موتور صدا به محض باز شدن بازی بیدار شود
+    SoundManager::instance(); 
 }
 
 void MainWindow::startNewGame(const QString& username, const QString& mode) {
@@ -2678,10 +3230,9 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     }
 }
 
-// ============================================================
-// FILE: ./src/ui/MainWindow.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\MainWindow.h
+======================================================================
 #pragma once
 #include <QMainWindow>
 #include <QStackedWidget>
@@ -2726,10 +3277,9 @@ private:
     QString m_currentMode;
 };
 
-// ============================================================
-// FILE: ./src/ui/PauseDialog.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\PauseDialog.cpp
+======================================================================
 #include "PauseDialog.h"
 #include <QVBoxLayout>
 #include <QLabel>
@@ -2765,10 +3315,9 @@ PauseDialog::PauseDialog(QWidget* parent) : QDialog(parent) {
 }
 
 
-// ============================================================
-// FILE: ./src/ui/PauseDialog.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\PauseDialog.h
+======================================================================
 #pragma once
 #include <QDialog>
 
@@ -2783,10 +3332,9 @@ signals:
 };
 
 
-// ============================================================
-// FILE: ./src/ui/ScoreboardWidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\ScoreboardWidget.cpp
+======================================================================
 #include "ScoreboardWidget.h"
 #include <QVBoxLayout>
 #include <QLabel>
@@ -2832,10 +3380,9 @@ void ScoreboardWidget::refresh() {
 }
 
 
-// ============================================================
-// FILE: ./src/ui/ScoreboardWidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\ScoreboardWidget.h
+======================================================================
 #pragma once
 #include <QWidget>
 #include <QTableWidget>
@@ -2856,15 +3403,15 @@ private:
 };
 
 
-// ============================================================
-// FILE: ./src/ui/SettingsWidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\SettingsWidget.cpp
+======================================================================
 #include "SettingsWidget.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QtMath>
 #include <QRandomGenerator>
+#include "../core/SoundManager.h"
 
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);
@@ -3009,17 +3556,54 @@ void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
     spawnParticles(hitPos, t.color, 20);
 
     switch (t.type) {
-        case TargetType::VolUp: m_volume = qMin(100, m_volume + 10); break;
-        case TargetType::VolDown: m_volume = qMax(0, m_volume - 10); break;
-        case TargetType::Fullscreen: 
-            m_fullscreen = !m_fullscreen; 
-            emit fullscreenToggled(m_fullscreen); 
-            break;
-        case TargetType::ThemeNeon: m_currentTheme = "Cyber Neon"; triggerEMP(t.pos); break;
-        case TargetType::ThemeArcade: m_currentTheme = "Retro Arcade"; triggerEMP(t.pos); break;
-        case TargetType::EMP: triggerEMP(t.pos); break;
-        case TargetType::BackToMenu: emit backClicked(); break;
-        case TargetType::ProMode: emit proModeClicked(); break;   
+    case TargetType::VolUp: 
+        m_volume = qMin(100, m_volume + 10); 
+        // اعمال ولوم واقعی
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::VolDown: 
+        m_volume = qMax(0, m_volume - 10); 
+        // اعمال ولوم واقعی
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::Fullscreen: 
+        m_fullscreen = !m_fullscreen; 
+        emit fullscreenToggled(m_fullscreen); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeNeon: 
+        m_currentTheme = "Cyber Neon"; 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeArcade: 
+        m_currentTheme = "Retro Arcade"; 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::EMP: 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playShoot(); // صدای متفاوت برای EMP
+        break;
+            
+    case TargetType::BackToMenu: 
+        emit backClicked(); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ProMode: 
+        emit proModeClicked(); 
+        SoundManager::instance().playPop();
+        break;   
     }
 }
 
@@ -3170,10 +3754,9 @@ void SettingsWidget::paintEvent(QPaintEvent* event) {
     painter.restore();
 }
 
-// ============================================================
-// FILE: ./src/ui/SettingsWidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\SettingsWidget.h
+======================================================================
 #pragma once
 #include <QWidget>
 #include <QTimer>
@@ -3257,10 +3840,9 @@ private:
     bool m_empActive = false;
 };
 
-// ============================================================
-// FILE: ./src/ui/StartGameWidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\StartGameWidget.cpp
+======================================================================
 #include "StartGameWidget.h"
 #include <QVBoxLayout>
 #include <QLabel>
@@ -3304,10 +3886,9 @@ StartGameWidget::StartGameWidget(QWidget* parent) : QWidget(parent) {
 }
 
 
-// ============================================================
-// FILE: ./src/ui/StartGameWidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\StartGameWidget.h
+======================================================================
 #pragma once
 #include <QWidget>
 #include <QLineEdit>
@@ -3328,10 +3909,9 @@ private:
 };
 
 
-// ============================================================
-// FILE: ./src/ui/ThemeManager.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\ThemeManager.h
+======================================================================
 #pragma once
 #include <QString>
 
@@ -3453,10 +4033,9 @@ public:
     }
 };
 
-// ============================================================
-// FILE: ./src/ui/poolballswidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\poolballswidget.cpp
+======================================================================
 #include "poolballswidget.h"
 
 #include <QRandomGenerator>
@@ -3658,10 +4237,9 @@ void PoolBallsWidget::paintGL()
 }
 
 
-// ============================================================
-// FILE: ./src/ui/poolballswidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\poolballswidget.h
+======================================================================
 #pragma once
 
 #include <QOpenGLWidget>
@@ -3728,10 +4306,9 @@ private:
 };
 
 
-// ============================================================
-// FILE: ./src/ui/waterbackgroundwidget.cpp
-// ============================================================
-
+======================================================================
+FILE: src\ui\waterbackgroundwidget.cpp
+======================================================================
 #include "waterbackgroundwidget.h"
 
 #include <QMouseEvent>
@@ -4090,10 +4667,9 @@ void WaterBackgroundWidget::paintGL()
 }
 
 
-// ============================================================
-// FILE: ./src/ui/waterbackgroundwidget.h
-// ============================================================
-
+======================================================================
+FILE: src\ui\waterbackgroundwidget.h
+======================================================================
 #pragma once
 
 #include <QOpenGLWidget>
@@ -4173,3 +4749,5 @@ private:
     int m_uTrailLoc = -1;
     int m_uTrailCountLoc = -1;
 };
+
+

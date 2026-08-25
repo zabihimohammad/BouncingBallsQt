@@ -35,18 +35,14 @@ void runLogicSelfTest() {
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
-    // ۱. تزریق فونت سراسری برای جلوگیری از ارور DirectWrite و فال‌بک به 8514oem
     QFont defaultFont("Segoe UI", 10);
     defaultFont.setStyleHint(QFont::SansSerif);
     app.setFont(defaultFont);
 
-    // ۲. اعمال استایل دوستتان بدون دستکاری
     app.setStyleSheet(ThemeManager::getMasterStyleSheet());
 
-    // ۳. اجرای تست لاجیک
     runLogicSelfTest();
 
-    // ۴. نمایش و فوکوس اجباری پنجره در ویندوز
     MainWindow window;
     window.show();
     window.raise();
