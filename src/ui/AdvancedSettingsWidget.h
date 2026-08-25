@@ -7,7 +7,9 @@
 #include <QColor>
 #include <QPolygonF>
 #include <QStringList>
+#include <QRectF>
 #include "../core/SoundManager.h"
+
 struct OrbitNode {
     qreal angle;          
     QString label;        
@@ -98,6 +100,10 @@ private:
 
     bool m_hasInteracted[4] = {false, false, false, false};
 
+    // متغیرهای دکمه بازگشت (Back Button)
+    QRectF m_backButtonRect;
+    bool m_backHovered = false;
+
     // ================== AUDIO ==================
     bool m_isDraggingCannon = false;
     QPointF m_cannonBase;      
@@ -128,7 +134,7 @@ private:
 
     // ================== DISPLAY ==================
     QPointF m_gearCenter;
-    qreal m_leverAngle = -110.0; // شروع از حالت عمودی (متمرکز به بالا)
+    qreal m_leverAngle = -110.0; 
     bool m_isDraggingLever = false;
     int m_fpsOptions[4] = {60, 120, 144, 999}; 
     int m_currentFpsIndex = 1;

@@ -89,6 +89,9 @@ void AdvancedSettingsWidget::resizeEvent(QResizeEvent* event) {
     int h = event->size().height();
     generateStars(w, h);
     
+    // دکمه بازگشت در بالا سمت چپ
+    m_backButtonRect = QRectF(30, 30, 150, 45);
+
     m_cannonBase = QPointF(150, h - 100);
     m_trackCrystalPos = QPointF(150, h - 350);
     
@@ -146,19 +149,16 @@ void AdvancedSettingsWidget::updateAudioLauncher() {
         m_audioBallPos += m_audioBallVel;
         m_audioBallVel.setY(m_audioBallVel.y() + 0.6); 
 
-        // شلیک به کریستال تغییر آهنگ
         if (std::hypot(m_audioBallPos.x() - m_trackCrystalPos.x(), m_audioBallPos.y() - m_trackCrystalPos.y()) < 45.0) {
             m_currentTrackIndex = (m_currentTrackIndex + 1) % m_tracks.size(); 
             spawnParticles(m_audioBallPos, QColor(255, 51, 200), 40, 1.5);
             m_audioBallFlying = false; 
             
-            // تغییر آهنگ واقعی
             SoundManager::instance().playMusic(m_tracks[m_currentTrackIndex]);
             SoundManager::instance().playPop();
             return; 
         }
 
-        // فرود روی خط‌کش تنظیم ولوم
         qreal groundY = height() - 100;
         if (m_audioBallPos.y() >= groundY) {
             m_audioBallPos.setY(groundY);
@@ -169,7 +169,6 @@ void AdvancedSettingsWidget::updateAudioLauncher() {
             qreal hitX = m_audioBallPos.x() - startX;
             m_volume = qBound(0, (int)std::round((hitX / (endX - startX)) * 100.0), 100);
 
-            // اعمال ولوم واقعی
             SoundManager::instance().setMusicVolume(m_volume);
             SoundManager::instance().setSfxVolume(m_volume);
 
@@ -195,7 +194,7 @@ void AdvancedSettingsWidget::updateHapticsSeismograph() {
         m_weightVelY += 1.5; 
         
         if (m_weightPos.y() >= m_anvilPos.y() - 20) { 
-            m_weightPos.setY(m_anvilPos.y() - 20); // استفاده از setY صحیح
+            m_weightPos.setY(m_anvilPos.y() - 20);
             m_weightFalling = false;
             
             qreal dropHeight = (height() - 100) - m_dragPos.y();
@@ -203,7 +202,7 @@ void AdvancedSettingsWidget::updateHapticsSeismograph() {
             
             m_currentScreenShake = m_shakeIntensity * 0.5; 
             spawnParticles(m_weightPos, QColor(51, 255, 153), 30, 2.0);
-            QApplication::beep();
+            SoundManager::instance().playBounce();
         }
     } else if (!m_isDraggingWeight) {
         qreal targetY = m_anvilPos.y() - 20 - m_shakeIntensity * 3.0;
@@ -213,7 +212,6 @@ void AdvancedSettingsWidget::updateHapticsSeismograph() {
 
 void AdvancedSettingsWidget::updateDisplayGearbox() {
     if (!m_isDraggingLever) {
-        // حرکت نرم به سمت زاویه مورد نظر (-150 تا -30)
         qreal targetAngle = -150.0 + m_currentFpsIndex * 40.0; 
         m_leverAngle = m_leverAngle * 0.8 + targetAngle * 0.2;
     }
@@ -240,6 +238,10 @@ void AdvancedSettingsWidget::calculate3D() {
 
 void AdvancedSettingsWidget::mouseMoveEvent(QMouseEvent* event) {
     m_mousePos = event->position();
+    
+    // وضعیت Hover دکمه بازگشت
+    m_backHovered = m_backButtonRect.contains(m_mousePos);
+
     if (!m_inSubMenu) {
         qreal dx = m_mousePos.x() - width() / 2.0;
         m_orbitSpeed = (dx * 0.003);
@@ -260,9 +262,8 @@ void AdvancedSettingsWidget::mouseMoveEvent(QMouseEvent* event) {
         m_weightPos.setY(qMin(m_mousePos.y(), m_anvilPos.y() - 20)); 
     }
     else if (m_activeNodeIndex == 3 && m_isDraggingLever) {
-        // محاسبه زاویه چرخش در نیمه بالایی (از -150 تا -30)
         qreal angle = std::atan2(m_mousePos.y() - m_gearCenter.y(), m_mousePos.x() - m_gearCenter.x()) * 180.0 / M_PI;
-        if (angle > 0) angle -= 360; // محدود کردن به مقادیر منفی در نیمه بالایی صفحه
+        if (angle > 0) angle -= 360; 
         
         m_leverAngle = qBound(-150.0, angle, -30.0);
         m_currentFpsIndex = qBound(0, (int)std::round((m_leverAngle + 150.0) / 40.0), 3);
@@ -278,6 +279,23 @@ void AdvancedSettingsWidget::mousePressEvent(QMouseEvent* event) {
     }
 
     if (event->button() == Qt::LeftButton) {
+        
+        // چک کردن کلیک روی دکمه بازگشت
+        if (m_backButtonRect.contains(m_mousePos)) {
+            if (m_inSubMenu) {
+                // اگر در مینی‌گیم هستیم، برگرد به سیاره
+                m_inSubMenu = false;
+                m_activeNodeIndex = -1;
+                m_isDraggingCannon = m_isDraggingCapsule = m_isDraggingWeight = m_isDraggingLever = false;
+                SoundManager::instance().playPop();
+            } else {
+                // اگر در سیاره هستیم، برگرد به منوی اصلی بازی
+                SoundManager::instance().playPop();
+                emit backClicked();
+            }
+            return;
+        }
+
         if (!m_inSubMenu) {
             for (int i = 0; i < m_nodes.size(); ++i) {
                 auto& node = m_nodes[i];
@@ -286,6 +304,7 @@ void AdvancedSettingsWidget::mousePressEvent(QMouseEvent* event) {
                     m_activeNodeIndex = i;
                     m_audioBallFlying = false;
                     m_audioBallPos = m_cannonBase;
+                    SoundManager::instance().playShoot();
                     break;
                 }
             }
@@ -329,13 +348,14 @@ void AdvancedSettingsWidget::mouseReleaseEvent(QMouseEvent* event) {
             m_audioBallPos = m_cannonBase;
             m_audioBallVel = QPointF((m_cannonBase.x() - m_dragPos.x()) * 0.18, (m_cannonBase.y() - m_dragPos.y()) * 0.18); 
             spawnParticles(m_cannonBase, Qt::white, 5);
+            SoundManager::instance().playShoot();
         }
         else if (m_isDraggingCapsule) {
             m_isDraggingCapsule = false;
             if (std::hypot(m_capsules[m_draggedCapsuleIndex].currentPos.x() - m_reactorCorePos.x(), m_capsules[m_draggedCapsuleIndex].currentPos.y() - m_reactorCorePos.y()) < 100) {
                 m_graphicsQuality = m_capsules[m_draggedCapsuleIndex].qualityLevel;
                 spawnParticles(m_reactorCorePos, m_capsules[m_draggedCapsuleIndex].color, 50, 2.0);
-                QApplication::beep();
+                SoundManager::instance().playPop();
                 m_currentScreenShake = 15.0; 
             }
         }
@@ -351,7 +371,7 @@ void AdvancedSettingsWidget::mouseReleaseEvent(QMouseEvent* event) {
             qreal rad = targetAngle * M_PI / 180.0;
             QPointF snapPos = m_gearCenter + QPointF(std::cos(rad)*150, std::sin(rad)*150);
             spawnParticles(snapPos, QColor(255, 204, 0), 15);
-            QApplication::beep();
+            SoundManager::instance().playPop();
         }
     }
 }
@@ -418,19 +438,29 @@ void AdvancedSettingsWidget::paintEvent(QPaintEvent* event) {
         }
     }
 
+    // ==========================================
+    // اصلاح مشکل عدم تقارن و فوکوس سیاره
+    // ==========================================
+    // ۱. رسم خود کره (سیاره جامد)
     QRadialGradient planetGrad(QPointF(cx, cy), planetRadius, QPointF(cx - planetRadius*0.35, cy - planetRadius*0.35));
     planetGrad.setColorAt(0.0, QColor(255, 255, 255));      
     planetGrad.setColorAt(0.15, QColor(60, 150, 200));      
     planetGrad.setColorAt(0.6, QColor(15, 35, 60));         
     planetGrad.setColorAt(1.0, QColor(2, 5, 10));           
-    painter.setPen(Qt::NoPen); painter.setBrush(planetGrad);
+    painter.setPen(Qt::NoPen); 
+    painter.setBrush(planetGrad);
     painter.drawEllipse(QPointF(cx, cy), planetRadius, planetRadius);
     
-    QRadialGradient atmosphere(cx, cy, planetRadius*1.15);
-    atmosphere.setColorAt(0.85, QColor(0, 242, 254, int(50 * m_currentScale))); 
-    atmosphere.setColorAt(1.0, QColor(0, 0, 0, 0));
+    // ۲. رسم هاله نورانی (بدون تداخل با سیاره مرکزی)
+    qreal haloRadius = planetRadius * 1.35;
+    QRadialGradient atmosphere(cx, cy, haloRadius); // فوکوس دقیق در مرکز
+    atmosphere.setColorAt(0.0, Qt::transparent);    // داخل خالی
+    atmosphere.setColorAt(0.72, Qt::transparent);   // خالی تا مرز سیاره (1.0 / 1.35 = ~0.74)
+    atmosphere.setColorAt(0.80, QColor(0, 242, 254, int(60 * m_currentScale))); // اوج درخشش در لبه
+    atmosphere.setColorAt(1.0, Qt::transparent);    // محو شدن در فضا
+    
     painter.setBrush(atmosphere);
-    painter.drawEllipse(QPointF(cx, cy), planetRadius*1.15, planetRadius*1.15);
+    painter.drawEllipse(QPointF(cx, cy), haloRadius, haloRadius);
 
     painter.setPen(QPen(QColor(0, 242, 254, 150), 3));
     painter.drawArc(orbitRect, 180 * 16, 180 * 16);
@@ -473,6 +503,19 @@ void AdvancedSettingsWidget::paintEvent(QPaintEvent* event) {
         painter.setBrush(QColor(part.color.red(), part.color.green(), part.color.blue(), int(part.life * 255)));
         painter.drawEllipse(part.pos, 4, 4);
     }
+
+    // ==========================================
+    // رسم دکمه بازگشت هوشمند
+    // ==========================================
+    QColor btnColor = m_backHovered ? QColor(255, 51, 102) : QColor(0, 242, 254);
+    painter.setPen(QPen(btnColor, 2));
+    painter.setBrush(m_backHovered ? QColor(255, 51, 102, 50) : QColor(0, 242, 254, 20));
+    painter.drawRoundedRect(m_backButtonRect, 8, 8);
+
+    painter.setPen(Qt::white);
+    painter.setFont(QFont("Arial", 11, QFont::Bold));
+    QString btnText = m_inSubMenu ? "< RETURN" : "< MAIN MENU";
+    painter.drawText(m_backButtonRect, Qt::AlignCenter, btnText);
 
     painter.restore(); 
 }

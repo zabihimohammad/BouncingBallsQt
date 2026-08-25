@@ -3,6 +3,7 @@
 #include "GameOverDialog.h"
 #include <QStatusBar>
 #include <QKeyEvent>
+#include "../core/SoundManager.h"
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
@@ -19,7 +20,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_startMenu = new StartGameWidget(this);
     m_settingsWidget = new SettingsWidget(this);
     m_scoreboardWidget = new ScoreboardWidget(&m_scoreManager, this);
-    m_advSettingsWidget = new AdvancedSettingsWidget(this); // <--- ساخته شد
+    m_advSettingsWidget = new AdvancedSettingsWidget(this); 
 
     // اضافه کردن به StackedWidget
     m_stackedWidget->addWidget(m_mainMenu);          // Index 0
@@ -67,6 +68,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             showNormal();
         }
     });
+    
+    // ===> ۲. این خط اضافه شد تا موتور صدا به محض باز شدن بازی بیدار شود
+    SoundManager::instance(); 
 }
 
 void MainWindow::startNewGame(const QString& username, const QString& mode) {

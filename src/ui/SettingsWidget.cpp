@@ -3,6 +3,7 @@
 #include <QMouseEvent>
 #include <QtMath>
 #include <QRandomGenerator>
+#include "../core/SoundManager.h"
 
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);
@@ -147,17 +148,54 @@ void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
     spawnParticles(hitPos, t.color, 20);
 
     switch (t.type) {
-        case TargetType::VolUp: m_volume = qMin(100, m_volume + 10); break;
-        case TargetType::VolDown: m_volume = qMax(0, m_volume - 10); break;
-        case TargetType::Fullscreen: 
-            m_fullscreen = !m_fullscreen; 
-            emit fullscreenToggled(m_fullscreen); 
-            break;
-        case TargetType::ThemeNeon: m_currentTheme = "Cyber Neon"; triggerEMP(t.pos); break;
-        case TargetType::ThemeArcade: m_currentTheme = "Retro Arcade"; triggerEMP(t.pos); break;
-        case TargetType::EMP: triggerEMP(t.pos); break;
-        case TargetType::BackToMenu: emit backClicked(); break;
-        case TargetType::ProMode: emit proModeClicked(); break;   
+    case TargetType::VolUp: 
+        m_volume = qMin(100, m_volume + 10); 
+        // اعمال ولوم واقعی
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::VolDown: 
+        m_volume = qMax(0, m_volume - 10); 
+        // اعمال ولوم واقعی
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::Fullscreen: 
+        m_fullscreen = !m_fullscreen; 
+        emit fullscreenToggled(m_fullscreen); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeNeon: 
+        m_currentTheme = "Cyber Neon"; 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeArcade: 
+        m_currentTheme = "Retro Arcade"; 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::EMP: 
+        triggerEMP(t.pos); 
+        SoundManager::instance().playShoot(); // صدای متفاوت برای EMP
+        break;
+            
+    case TargetType::BackToMenu: 
+        emit backClicked(); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ProMode: 
+        emit proModeClicked(); 
+        SoundManager::instance().playPop();
+        break;   
     }
 }
 
