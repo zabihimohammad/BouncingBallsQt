@@ -1,8 +1,9 @@
 #pragma once
+
 #include "Ball.h"
 #include <vector>
+#include <utility>
 #include <QPointF>
-#include <QSet>
 
 class GridManager {
 public:
@@ -13,14 +14,21 @@ public:
     static constexpr qreal BALL_DIAMETER = BALL_RADIUS * 2.0;
 
     GridManager();
+    ~GridManager();
+
+    // جلوگیری از کپی سطحی برای مدیریت امن حافظه
+    GridManager(const GridManager&) = delete;
+    GridManager& operator=(const GridManager&) = delete;
 
     void initGrid();
+    void clearGrid();
     void loadLevel(int levelNumber);
     void generateRandomLevel();
     void addRowFromTop();
 
     bool isOccupied(int r, int c) const;
     Ball* getBall(int r, int c);
+    const Ball* getBall(int r, int c) const;
     bool setBall(int r, int c, Ball* ball);
     void removeBall(int r, int c);
 
@@ -28,13 +36,23 @@ public:
     void getGridCoords(const QPointF& pos, int& outR, int& outC) const;
 
     std::vector<std::pair<int, int>> getNeighbors(int r, int c) const;
-    std::vector<std::pair<int, int>> findMatches(int startR, int startC, BallColor color);
-    std::vector<std::pair<int, int>> findFloatingBalls();
 
+    // الگوریتم‌های مچینگ و مکانیک‌های ویژه
+    std::vector<std::pair<int, int>> findMatches(int startR, int startC,
+                                                 BallColor color = BallColor::None,
+                                                 BallType type = BallType::Regular,
+                                                 BallColor secondaryColor = BallColor::None);
+    std::vector<std::pair<int, int>> findFloatingBalls();
+    std::vector<std::pair<int, int>> explodeBomb(int centerR, int centerC);
+    std::vector<std::pair<int, int>> unlockNeighbors(int r, int c);
+
+    // بررسی وضعیت‌های بازی
     bool isBottomReached() const;
     bool isCleared() const;
     std::vector<BallColor> getRemainingColors() const;
 
 private:
     std::vector<std::vector<Ball*>> m_grid;
+    bool isValidCoord(int r, int c) const;
+    static BallColor getStandardColor(int index);
 };

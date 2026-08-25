@@ -14,3 +14,5 @@ CMakeLists.txt.user
 *.a
 *.so
 bin/
+all_project_code.txt
+bundle_project.py

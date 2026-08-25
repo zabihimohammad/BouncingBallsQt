@@ -1,28 +1,42 @@
 #pragma once
+
 #include <QGraphicsItem>
 #include <QPainter>
 #include "../core/Ball.h"
 
 class CannonItem : public QGraphicsItem {
 public:
-    CannonItem(qreal width, qreal height);
+    CannonItem(qreal width = 352.0, qreal height = 600.0);
 
     QRectF boundingRect() const override;
-    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
+    void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget = nullptr) override;
 
     void setAngle(qreal angleDeg);
     qreal getAngle() const { return m_angle; }
 
-    void setCurrentBall(BallColor c);
-    BallColor getCurrentBall() const { return m_currentBall; }
-    void setNextBall(BallColor c);
-    BallColor getNextBall() const { return m_nextBall; }
+    // تنظیم گلوله آماده شلیک
+    void setCurrentBall(BallColor color, BallType type = BallType::Regular);
+    BallColor getCurrentColor() const { return m_currentColor; }
+    BallType getCurrentType() const { return m_currentType; }
+
+    // تنظیم گلوله بعدی در خشاب
+    void setNextBall(BallColor color, BallType type = BallType::Regular);
+    BallColor getNextColor() const { return m_nextColor; }
+    BallType getNextType() const { return m_nextType; }
+
+    // جابجایی سریع دو گلوله با کلید Space
     void swapBalls();
 
 private:
-    qreal m_width;
-    qreal m_height;
+    qreal m_sceneWidth;
+    qreal m_sceneHeight;
     qreal m_angle = 90.0;
-    BallColor m_currentBall = BallColor::RED;
-    BallColor m_nextBall = BallColor::BLUE;
+
+    BallColor m_currentColor = BallColor::Red;
+    BallType m_currentType = BallType::Regular;
+
+    BallColor m_nextColor = BallColor::Blue;
+    BallType m_nextType = BallType::Regular;
+
+    void drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type);
 };
