@@ -1,5 +1,6 @@
 #include "LevelSelectWidget.h"
 #include "../core/SoundManager.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QMouseEvent>
 
@@ -72,12 +73,15 @@ void LevelSelectWidget::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    int baseHue = ThemeManager::instance().getBaseHue();
+
     QLinearGradient bg(0, 0, 0, height());
-    bg.setColorAt(0.0, QColor(8, 12, 22));
-    bg.setColorAt(1.0, QColor(2, 4, 8));
+    bg.setColorAt(0.0, QColor::fromHsv(baseHue, 220, 16));
+    bg.setColorAt(1.0, QColor::fromHsv(baseHue, 240, 6));
     painter.fillRect(rect(), bg);
 
-    painter.setPen(QColor(0, 242, 254));
+    painter.setPen(priCol);
     painter.setFont(QFont("Consolas", 26, QFont::Black));
     painter.drawText(QRectF(0, 40, width(), 40), Qt::AlignCenter, "SELECT MISSION SECTOR");
 
@@ -127,9 +131,9 @@ void LevelSelectWidget::paintEvent(QPaintEvent* event) {
         painter.restore();
     }
 
-    QColor bCol = m_backHovered ? QColor(255, 51, 102) : QColor(0, 242, 254);
+    QColor bCol = m_backHovered ? QColor(255, 51, 102) : priCol;
     painter.setPen(QPen(bCol, 2));
-    painter.setBrush(m_backHovered ? QColor(255, 51, 102, 40) : QColor(0, 242, 254, 15));
+    painter.setBrush(m_backHovered ? QColor(255, 51, 102, 40) : QColor(priCol.red(), priCol.green(), priCol.blue(), 15));
     painter.drawRoundedRect(m_backBtnRect, 8, 8);
 
     painter.setPen(Qt::white);

@@ -20,6 +20,9 @@ Q_OBJECT
 public:
     explicit LevelSelectWidget(QWidget* parent = nullptr);
 
+    Q_INVOKABLE void pauseAnimation() {}
+    Q_INVOKABLE void resumeAnimation() { update(); }
+
 signals:
     void levelSelected(int levelNumber);
     void backClicked();
