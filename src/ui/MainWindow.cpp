@@ -3,14 +3,16 @@
 #include "GameOverDialog.h"
 #include <QStatusBar>
 #include <QKeyEvent>
+#include <QTimer>
+#include <QMessageBox>
 #include "../core/SoundManager.h"
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
     
-    setMinimumSize(420, 680);
-    resize(420, 680);
+    setMinimumSize(800, 600);
     setStyleSheet("background-color: #1e272e;");
+    showFullScreen();
 
     m_stackedWidget = new QStackedWidget(this);
     setCentralWidget(m_stackedWidget);
@@ -37,6 +39,9 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_mainMenu, &MainMenuWidget::scoreboardClicked, this, [this]() {
         m_scoreboardWidget->refresh();
         m_stackedWidget->setCurrentIndex(3);
+    });
+    connect(m_mainMenu, &MainMenuWidget::helpClicked, this, [this]() {
+        QMessageBox::information(this, "FIELD MANUAL", "Welcome to CYBER BOUNCE!\n\n1. Play Game to launch your mission.\n2. In-game, use left click to shoot/interact depending on the mode.\n3. Check Leaderboard to see your global standing.\n4. Use Settings to tune graphics and audio.\n\nGood luck, Operative!");
     });
     connect(m_mainMenu, &MainMenuWidget::exitClicked, this, &QMainWindow::close);
 
@@ -68,8 +73,25 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             showNormal();
         }
     });
+
+    // ===> سیستم هوشمند مدیریت منابع: توقف پردازش‌های پنهان <===
+    connect(m_stackedWidget, &QStackedWidget::currentChanged, this, [this](int index) {
+        for (int i = 0; i < m_stackedWidget->count(); ++i) {
+            QWidget* w = m_stackedWidget->widget(i);
+            if (!w) continue;
+            
+            if (i == index) {
+                QMetaObject::invokeMethod(w, "resumeAnimation");
+            } else {
+                QMetaObject::invokeMethod(w, "pauseAnimation");
+            }
+        }
+    });
     
-    // ===> ۲. این خط اضافه شد تا موتور صدا به محض باز شدن بازی بیدار شود
+    // فراخوانی دستی برای بار اول تا فقط تایمر منوی اصلی روشن بماند
+    emit m_stackedWidget->currentChanged(0);
+
+    // ===> این خط اضافه شد تا موتور صدا به محض باز شدن بازی بیدار شود
     SoundManager::instance(); 
 }
 

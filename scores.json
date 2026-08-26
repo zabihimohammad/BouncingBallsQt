@@ -1,17 +1,86 @@
 [
     {
+        "mode": "CLASSIC",
+        "score": 3670,
+        "timestamp": "2026-08-26 09:22",
+        "username": "PLAYER"
+    },
+    {
+        "mode": "CLASSIC",
+        "score": 3330,
+        "timestamp": "2026-08-26 07:26",
+        "username": "player"
+    },
+    {
+        "mode": "TIME_ATTACK",
+        "score": 3180,
+        "timestamp": "2026-08-26 08:01",
+        "username": "OPERATIVE_X"
+    },
+    {
+        "mode": "ENDLESS",
+        "score": 3180,
+        "timestamp": "2026-08-26 09:39",
+        "username": "PLAYER"
+    },
+    {
+        "mode": "ENDLESS",
+        "score": 2960,
+        "timestamp": "2026-08-26 09:36",
+        "username": "OPERATIVE_X"
+    },
+    {
+        "mode": "CLASSIC",
+        "score": 2760,
+        "timestamp": "2026-08-26 07:28",
+        "username": "player"
+    },
+    {
+        "mode": "ENDLESS",
+        "score": 2215,
+        "timestamp": "2026-08-26 09:37",
+        "username": "OPERATIVE_X"
+    },
+    {
         "mode": "Classic",
         "score": 160,
+        "timestamp": "2026-08-26 07:16",
         "username": "Player"
     },
     {
         "mode": "Classic",
         "score": 160,
+        "timestamp": "2026-08-26 07:16",
         "username": "Player"
+    },
+    {
+        "mode": "ENDLESS",
+        "score": 90,
+        "timestamp": "2026-08-26 07:16",
+        "username": "OPERATIVE_X"
     },
     {
         "mode": "Classic",
         "score": 0,
+        "timestamp": "2026-08-26 07:16",
         "username": "Player"
+    },
+    {
+        "mode": "CLASSIC",
+        "score": 0,
+        "timestamp": "2026-08-26 07:24",
+        "username": "player 1"
+    },
+    {
+        "mode": "TIME_ATTACK",
+        "score": 0,
+        "timestamp": "2026-08-26 07:36",
+        "username": "OPERATIVE_X"
+    },
+    {
+        "mode": "CLASSIC",
+        "score": 0,
+        "timestamp": "2026-08-26 09:20",
+        "username": "OPERATIVE_X"
     }
 ]

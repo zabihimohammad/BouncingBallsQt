@@ -1,12 +1,18 @@
 #include "SettingsWidget.h"
 #include <QPainter>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QtMath>
 #include <QRandomGenerator>
+#include <QRadialGradient>
+#include <QLinearGradient>
 #include "../core/SoundManager.h"
 
 SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
     setMouseTracking(true);
+    setFocusPolicy(Qt::StrongFocus); // برای دریافت کلیدها
+    
+    initEnvironment();
     initTargets();
 
     m_timer = new QTimer(this);
@@ -14,33 +20,51 @@ SettingsWidget::SettingsWidget(QWidget* parent) : QWidget(parent) {
     m_timer->start(16); // 60 FPS
 }
 
+void SettingsWidget::initEnvironment() {
+    auto rng = QRandomGenerator::global();
+    m_stars.clear();
+    for (int i = 0; i < 150; ++i) {
+        SettingsBgStar star;
+        star.pos = QPointF(rng->bounded(3000), rng->bounded(2000));
+        star.size = 1.0 + rng->generateDouble() * 2.0;
+        star.phase = rng->bounded(360) * M_PI / 180.0;
+        star.speed = (rng->bounded(5) + 1) / 50.0;
+        
+        int r = rng->bounded(100);
+        if (r < 20) star.color = QColor(0, 242, 254);
+        else if (r < 40) star.color = QColor(255, 0, 255);
+        else star.color = Qt::white;
+        
+        m_stars.append(star);
+    }
+}
+
 void SettingsWidget::initTargets() {
     m_targets.clear();
+    auto rng = QRandomGenerator::global();
     
     auto addTarget = [&](TargetType type, QString label, QColor color, qreal radius) {
         SettingTarget t;
         t.type = type; t.label = label; t.color = color;
         t.radius = radius;
-        // در ابتدا همه در مرکز مخفی هستند تا زمان تغییر سایز اول فرا برسد
         t.pos = QPointF(-1000, -1000); 
+        t.rotSpeedX = (rng->bounded(60) - 30) / 10.0;
+        t.rotSpeedY = (rng->bounded(60) - 30) / 10.0;
+        t.rotSpeedZ = (rng->bounded(60) - 30) / 10.0;
         m_targets.append(t);
     };
 
-    addTarget(TargetType::VolUp, "VOL +", QColor(0, 255, 120), 45);
-    addTarget(TargetType::VolDown, "VOL -", QColor(255, 50, 80), 45);
-    addTarget(TargetType::Fullscreen, "DISPLAY\nMODE", QColor(0, 200, 255), 55);
-    
-    addTarget(TargetType::ThemeNeon, "THEME:\nNEON", QColor(255, 0, 255), 50);
-    addTarget(TargetType::ThemeArcade, "THEME:\nARCADE", QColor(255, 200, 0), 50);
-    
-    addTarget(TargetType::EMP, "SHOCKWAVE\n(TEST)", QColor(255, 120, 0), 40);
-    addTarget(TargetType::BackToMenu, "EXIT TO\nMENU", QColor(200, 200, 200), 65);
-
-    addTarget(TargetType::ProMode, "PRO MODE\nTERMINAL", QColor(0, 255, 100), 60);
+    addTarget(TargetType::VolUp, "VOL +", QColor(0, 255, 120), 55);
+    addTarget(TargetType::VolDown, "VOL -", QColor(255, 50, 80), 55);
+    addTarget(TargetType::Fullscreen, "DISPLAY", QColor(0, 200, 255), 60);
+    addTarget(TargetType::ThemeNeon, "THEME\nNEON", QColor(255, 0, 255), 50);
+    addTarget(TargetType::ThemeArcade, "THEME\nARCADE", QColor(255, 200, 0), 50);
+    addTarget(TargetType::EMP, "SHOCKWAVE", QColor(255, 120, 0), 45);
+    addTarget(TargetType::ProMode, "PRO MODE", QColor(0, 255, 100), 65);
+    addTarget(TargetType::BackToMenu, "EXIT", QColor(200, 200, 200), 50);
 }
 
 void SettingsWidget::scatterTargets() {
-    // پرتاب حباب‌ها از مرکز به اطراف در لحظه باز شدن صفحه
     QPointF center(width() / 2.0, height() / 3.0);
     for (auto& t : m_targets) {
         t.pos = center;
@@ -51,7 +75,29 @@ void SettingsWidget::scatterTargets() {
 }
 
 void SettingsWidget::gameLoop() {
-    if (width() < 100) return; // جلوگیری از باگ فشردگی قبل از رندر کامل
+    if (width() < 100) return;
+    m_time += 0.03;
+
+    // شلیک ممتد
+    if (m_isFiring) {
+        if (m_framesSinceLastFire >= 4) { // رگبار سریع (هر 4 فریم)
+            fireProjectile();
+            m_framesSinceLastFire = 0;
+            m_cannonHeat = qMin(1.0, m_cannonHeat + 0.15);
+            m_cannonRecoil = 15.0; // انیمیشن لگد
+        }
+    }
+    m_framesSinceLastFire++;
+    
+    // بازیابی لگد و خنک شدن لوله
+    m_cannonRecoil += (0.0 - m_cannonRecoil) * 0.2;
+    m_cannonHeat = qMax(0.0, m_cannonHeat - 0.02);
+
+    // پیشروی گلیچ
+    if (m_isGlitching) {
+        m_glitchWave += 0.04;
+        if (m_glitchWave > 1.2) m_isGlitching = false;
+    }
 
     // آپدیت گلوله‌ها
     for (auto& p : m_projectiles) {
@@ -61,28 +107,34 @@ void SettingsWidget::gameLoop() {
         }
     }
     m_projectiles.erase(std::remove_if(m_projectiles.begin(), m_projectiles.end(),
-                        [](const Projectile& p) { return !p.active; }), m_projectiles.end());
+                        [](const SettingsProjectile& p) { return !p.active; }), m_projectiles.end());
 
-    // فیزیک و آپدیت حباب‌ها
-    applyTargetRepulsion(); // جلوگیری از در هم رفتن حباب‌ها
+    applyTargetRepulsion();
     
     for (int i = 0; i < m_targets.size(); ++i) {
         auto& t = m_targets[i];
         t.pos += t.velocity;
-        
         t.velocity *= 0.98; // اصطکاک
         
-        // حرکت شناور ملایم همیشگی
         if (t.velocity.manhattanLength() < 0.6) {
             t.velocity.setX(t.velocity.x() > 0 ? 0.6 : -0.6);
             t.velocity.setY(t.velocity.y() > 0 ? 0.6 : -0.6);
         }
 
-        if (t.hitScale > 1.0) t.hitScale -= 0.04;
+        // چرخش حلقه‌ها
+        t.rotX = std::fmod(t.rotX + t.rotSpeedX, 360.0);
+        t.rotY = std::fmod(t.rotY + t.rotSpeedY, 360.0);
+        t.rotZ = std::fmod(t.rotZ + t.rotSpeedZ, 360.0);
 
+        // بازیابی فیزیک ژله‌ای (Squash & Stretch)
+        t.squash += (1.0 - t.squash) * 0.15;
+        t.stretch += (1.0 - t.stretch) * 0.15;
+        if (t.hitScale > 1.0) t.hitScale -= 0.05;
+
+        // بررسی برخورد لیزر با درون‌ها
         for (auto& p : m_projectiles) {
             if (!p.active) continue;
-            qreal dist = std::sqrt(std::pow(p.pos.x() - t.pos.x(), 2) + std::pow(p.pos.y() - t.pos.y(), 2));
+            qreal dist = std::hypot(p.pos.x() - t.pos.x(), p.pos.y() - t.pos.y());
             if (dist < t.radius * t.hitScale) {
                 p.active = false;
                 triggerHitEffect(i, p.pos);
@@ -94,33 +146,145 @@ void SettingsWidget::gameLoop() {
     // آپدیت ذرات
     for (auto& part : m_particles) {
         part.pos += part.velocity;
-        part.life -= 0.03; 
+        part.life -= 0.02; 
     }
     m_particles.erase(std::remove_if(m_particles.begin(), m_particles.end(),
-                      [](const Particle& part) { return part.life <= 0; }), m_particles.end());
+                      [](const SettingsParticle& part) { return part.life <= 0; }), m_particles.end());
 
-    // آپدیت موج
     if (m_empActive) {
-        m_empRadius += 30.0; 
-        if (m_empRadius > 2000) m_empActive = false;
+        m_empRadius += 40.0; 
+        if (m_empRadius > 2500) m_empActive = false;
     }
 
     update();
 }
 
+void SettingsWidget::fireProjectile() {
+    SettingsProjectile p;
+    p.pos = QPointF(width() / 2.0, height() - 40.0);
+    qreal speed = 40.0; 
+    p.velocity = QPointF(std::cos(m_cannonAngle) * speed, std::sin(m_cannonAngle) * speed);
+    p.color = m_cannonHeat > 0.6 ? QColor(255, 100, 50) : QColor(0, 242, 254); // لیزر داغ
+    m_projectiles.append(p);
+    
+    spawnParticles(p.pos, p.color, 3);
+    SoundManager::instance().playShoot();
+}
+
+void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
+    auto& t = m_targets[targetIndex];
+    t.hitScale = 1.25;
+    t.squash = 0.6;   // فشرده شدن
+    t.stretch = 1.4;  // کشیده شدن
+    
+    // سرعت چرخش موقتاً زیاد می‌شود
+    t.rotSpeedX += (t.rotSpeedX > 0 ? 5.0 : -5.0);
+    t.rotSpeedY += (t.rotSpeedY > 0 ? 5.0 : -5.0);
+    
+    spawnParticles(hitPos, t.color, 15);
+    handleTargetAction(t.type, t.pos);
+}
+
+void SettingsWidget::handleTargetAction(TargetType type, const QPointF& hitPos) {
+    switch (type) {
+    case TargetType::VolUp: 
+        m_volume = qMin(100, m_volume + 10); 
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::VolDown: 
+        m_volume = qMax(0, m_volume - 10); 
+        SoundManager::instance().setMusicVolume(m_volume);
+        SoundManager::instance().setSfxVolume(m_volume);
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::Fullscreen: 
+        m_fullscreen = !m_fullscreen; 
+        emit fullscreenToggled(m_fullscreen); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeNeon: 
+        if (m_currentTheme != "Cyber Neon") {
+            m_currentTheme = "Cyber Neon"; 
+            m_isGlitching = true;
+            m_glitchWave = 0.0;
+        }
+        triggerEMP(hitPos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeArcade: 
+        if (m_currentTheme != "Retro Arcade") {
+            m_currentTheme = "Retro Arcade"; 
+            m_isGlitching = true;
+            m_glitchWave = 0.0;
+        }
+        triggerEMP(hitPos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::EMP: 
+        triggerEMP(hitPos); 
+        SoundManager::instance().playShoot(); 
+        break;
+            
+    case TargetType::BackToMenu: 
+        emit backClicked(); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ProMode: 
+        emit proModeClicked(); 
+        SoundManager::instance().playPop();
+        break;   
+    }
+}
+
+void SettingsWidget::triggerEMP(const QPointF& center) {
+    m_empActive = true;
+    m_empRadius = 0.0;
+    for (auto& t : m_targets) {
+        qreal dx = t.pos.x() - center.x();
+        qreal dy = t.pos.y() - center.y();
+        qreal dist = std::hypot(dx, dy);
+        if (dist > 0.1) {
+            t.velocity.setX(t.velocity.x() + (dx / dist) * 30.0); 
+            t.velocity.setY(t.velocity.y() + (dy / dist) * 30.0);
+        }
+    }
+}
+
+void SettingsWidget::spawnParticles(const QPointF& pos, const QColor& color, int count) {
+    auto rng = QRandomGenerator::global();
+    for (int i = 0; i < count; ++i) {
+        SettingsParticle part;
+        part.pos = pos;
+        qreal angle = rng->bounded(360) * M_PI / 180.0;
+        qreal speed = rng->bounded(40, 120) / 10.0;
+        part.velocity = QPointF(std::cos(angle) * speed, std::sin(angle) * speed);
+        part.maxLife = (rng->bounded(50) + 50) / 100.0;
+        part.life = part.maxLife;
+        part.color = color;
+        m_particles.append(part);
+    }
+}
+
 void SettingsWidget::applyTargetRepulsion() {
-    // سیستم دافعه مغناطیسی بین حباب‌ها تا همیشه فاصله داشته باشند
     for (int i = 0; i < m_targets.size(); ++i) {
         for (int j = i + 1; j < m_targets.size(); ++j) {
             auto& t1 = m_targets[i];
             auto& t2 = m_targets[j];
             qreal dx = t2.pos.x() - t1.pos.x();
             qreal dy = t2.pos.y() - t1.pos.y();
-            qreal dist = std::sqrt(dx*dx + dy*dy);
-            qreal minDist = (t1.radius + t2.radius) * 1.2; // 20% فاصله امن
+            qreal dist = std::hypot(dx, dy);
+            qreal minDist = (t1.radius + t2.radius) * 1.3; 
 
             if (dist < minDist && dist > 0.1) {
-                qreal force = (minDist - dist) * 0.05;
+                qreal force = (minDist - dist) * 0.08;
                 t1.velocity.setX(t1.velocity.x() - (dx / dist) * force);
                 t1.velocity.setY(t1.velocity.y() - (dy / dist) * force);
                 t2.velocity.setX(t2.velocity.x() + (dx / dist) * force);
@@ -142,89 +306,7 @@ void SettingsWidget::keepTargetsInBounds() {
     }
 }
 
-void SettingsWidget::triggerHitEffect(int targetIndex, const QPointF& hitPos) {
-    auto& t = m_targets[targetIndex];
-    t.hitScale = 1.3; 
-    spawnParticles(hitPos, t.color, 20);
-
-    switch (t.type) {
-    case TargetType::VolUp: 
-        m_volume = qMin(100, m_volume + 10); 
-        // اعمال ولوم واقعی
-        SoundManager::instance().setMusicVolume(m_volume);
-        SoundManager::instance().setSfxVolume(m_volume);
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::VolDown: 
-        m_volume = qMax(0, m_volume - 10); 
-        // اعمال ولوم واقعی
-        SoundManager::instance().setMusicVolume(m_volume);
-        SoundManager::instance().setSfxVolume(m_volume);
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::Fullscreen: 
-        m_fullscreen = !m_fullscreen; 
-        emit fullscreenToggled(m_fullscreen); 
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::ThemeNeon: 
-        m_currentTheme = "Cyber Neon"; 
-        triggerEMP(t.pos); 
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::ThemeArcade: 
-        m_currentTheme = "Retro Arcade"; 
-        triggerEMP(t.pos); 
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::EMP: 
-        triggerEMP(t.pos); 
-        SoundManager::instance().playShoot(); // صدای متفاوت برای EMP
-        break;
-            
-    case TargetType::BackToMenu: 
-        emit backClicked(); 
-        SoundManager::instance().playPop();
-        break;
-            
-    case TargetType::ProMode: 
-        emit proModeClicked(); 
-        SoundManager::instance().playPop();
-        break;   
-    }
-}
-
-void SettingsWidget::triggerEMP(const QPointF& center) {
-    m_empActive = true;
-    m_empRadius = 0.0;
-    for (auto& t : m_targets) {
-        qreal dx = t.pos.x() - center.x();
-        qreal dy = t.pos.y() - center.y();
-        qreal dist = std::sqrt(dx*dx + dy*dy);
-        if (dist > 0.1) {
-            t.velocity.setX(t.velocity.x() + (dx / dist) * 25.0); 
-            t.velocity.setY(t.velocity.y() + (dy / dist) * 25.0);
-        }
-    }
-}
-
-void SettingsWidget::spawnParticles(const QPointF& pos, const QColor& color, int count) {
-    for (int i = 0; i < count; ++i) {
-        Particle part;
-        part.pos = pos;
-        qreal angle = (QRandomGenerator::global()->bounded(360)) * M_PI / 180.0;
-        qreal speed = (QRandomGenerator::global()->bounded(40, 100)) / 10.0;
-        part.velocity = QPointF(std::cos(angle) * speed, std::sin(angle) * speed);
-        part.life = 1.0;
-        part.color = color;
-        m_particles.append(part);
-    }
-}
+// ================= ورودی کاربر =================
 
 void SettingsWidget::mouseMoveEvent(QMouseEvent* event) {
     m_mousePos = event->position();
@@ -235,113 +317,324 @@ void SettingsWidget::mouseMoveEvent(QMouseEvent* event) {
 
 void SettingsWidget::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
-        Projectile p;
-        p.pos = QPointF(width() / 2.0, height() - 40.0);
-        qreal speed = 35.0; 
-        p.velocity = QPointF(std::cos(m_cannonAngle) * speed, std::sin(m_cannonAngle) * speed);
-        m_projectiles.append(p);
-        spawnParticles(p.pos, QColor(0, 242, 254), 3); // جرقه لوله شلیک
+        // ابتدا بررسی کنیم آیا مستقیم روی گوی کلیک شده است (تعامل دوگانه)
+        bool directHit = false;
+        for (int i = 0; i < m_targets.size(); ++i) {
+            auto& t = m_targets[i];
+            if (std::hypot(event->position().x() - t.pos.x(), event->position().y() - t.pos.y()) < t.radius) {
+                triggerHitEffect(i, event->position());
+                directHit = true;
+                break;
+            }
+        }
+        
+        if (!directHit) {
+            m_isFiring = true;
+            m_framesSinceLastFire = 4; // شلیک آنی در فریم اول
+        }
+    }
+}
+
+void SettingsWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        m_isFiring = false;
+    }
+}
+
+void SettingsWidget::keyPressEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Space) {
+        m_isFiring = true;
+        m_framesSinceLastFire = 4;
+    } else if (event->key() == Qt::Key_Right || event->key() == Qt::Key_Up) {
+        handleTargetAction(TargetType::VolUp, QPointF(width()/2.0, height()/2.0));
+    } else if (event->key() == Qt::Key_Left || event->key() == Qt::Key_Down) {
+        handleTargetAction(TargetType::VolDown, QPointF(width()/2.0, height()/2.0));
+    }
+}
+
+void SettingsWidget::keyReleaseEvent(QKeyEvent* event) {
+    if (event->key() == Qt::Key_Space) {
+        m_isFiring = false;
     }
 }
 
 void SettingsWidget::resizeEvent(QResizeEvent* event) {
     if (m_firstShow && width() > 100) {
-        scatterTargets(); // انفجار اولیه هنگام باز شدن صفحه!
+        scatterTargets(); 
         m_firstShow = false;
     }
     QWidget::resizeEvent(event);
 }
+
+// ================= رندرینگ شاهکار =================
 
 void SettingsWidget::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // ۱. پس‌زمینه
-    QLinearGradient bgGrad(0, 0, 0, height());
-    if (m_currentTheme == "Cyber Neon") {
-        bgGrad.setColorAt(0.0, QColor(6, 9, 15)); bgGrad.setColorAt(1.0, QColor(2, 3, 5));
-    } else {
-        bgGrad.setColorAt(0.0, QColor(20, 5, 10)); bgGrad.setColorAt(1.0, QColor(5, 1, 2));
-    }
-    painter.fillRect(rect(), bgGrad);
+    drawNebulaBackground(painter);
 
-    // ۲. موج انفجار
+    // موج انفجار EMP
     if (m_empActive) {
-        painter.setPen(QPen(QColor(0, 242, 254, qMax(0, 150 - int(m_empRadius / 15.0))), 6));
+        painter.setPen(QPen(QColor(0, 242, 254, qMax(0, 150 - int(m_empRadius / 15.0))), 8));
         painter.setBrush(Qt::NoBrush);
         painter.drawEllipse(QPointF(width()/2, height()/2), m_empRadius, m_empRadius);
     }
 
-    // ۳. رابط هولوگرامی بالا (HUD)
-    painter.setPen(QPen(QColor(255, 255, 255, 30), 1));
-    painter.drawRect(20, 20, width() - 40, 60);
-    
-    painter.setPen(QColor(0, 242, 254, 200));
-    painter.setFont(QFont("Arial", 14, QFont::Bold));
-    QString statusText = QString("SYSTEM OVERRIDE | VOL: %1% | DISPLAY: %2 | THEME: %3")
-                         .arg(m_volume)
-                         .arg(m_fullscreen ? "FULLSCREEN" : "WINDOWED")
-                         .arg(m_currentTheme.toUpper());
-    painter.drawText(QRect(0, 20, width(), 60), Qt::AlignCenter, statusText);
-
-    // ۴. رسم حباب‌ها (هولوگرامی شیشه‌ای)
+    // درون‌های شناور
     for (const auto& t : m_targets) {
-        qreal currentRadius = t.radius * t.hitScale;
-        
-        // حلقه بیرونی درخشان
-        painter.setPen(QPen(t.color, 3));
-        painter.setBrush(QColor(t.color.red(), t.color.green(), t.color.blue(), 40));
-        painter.drawEllipse(t.pos, currentRadius, currentRadius);
-        
-        // هسته شیشه‌ای داخلی
+        drawTargetDrone(painter, t);
+    }
+
+    drawLaserProjectiles(painter);
+    drawParticles(painter);
+    drawAdvancedCannon(painter);
+    
+    if (m_isGlitching) {
+        drawGlitchSweep(painter);
+    }
+
+    drawHUD(painter);
+}
+
+void SettingsWidget::drawNebulaBackground(QPainter& painter) {
+    QLinearGradient bgGrad(0, 0, 0, height());
+    if (m_currentTheme == "Cyber Neon") {
+        bgGrad.setColorAt(0.0, QColor(6, 9, 15)); 
+        bgGrad.setColorAt(1.0, QColor(2, 3, 5));
+    } else {
+        bgGrad.setColorAt(0.0, QColor(20, 5, 10)); 
+        bgGrad.setColorAt(1.0, QColor(5, 1, 2));
+    }
+    painter.fillRect(rect(), bgGrad);
+
+    // سحابی
+    QRadialGradient neb(width()*0.5, height()*0.5, height());
+    QColor nC = (m_currentTheme == "Cyber Neon") ? QColor(0, 150, 255, 30) : QColor(255, 50, 100, 30);
+    neb.setColorAt(0, nC);
+    neb.setColorAt(1, Qt::transparent);
+    painter.fillRect(rect(), neb);
+
+    for (auto& star : m_stars) {
+        qreal currentBright = (std::sin(m_time * star.speed + star.phase) + 1.0) / 2.0;
+        QColor c = star.color;
+        c.setAlpha(int(currentBright * 200 + 30));
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 15));
-        painter.drawEllipse(t.pos, currentRadius * 0.8, currentRadius * 0.8);
-
-        // سایه متن برای خوانایی
-        painter.setPen(QColor(0, 0, 0, 150));
-        painter.setFont(QFont("Arial", 10, QFont::Black));
-        painter.drawText(QRectF(t.pos.x() - currentRadius + 2, t.pos.y() - currentRadius + 2, currentRadius*2, currentRadius*2), Qt::AlignCenter, t.label);
-        
-        // متن اصلی
-        painter.setPen(Qt::white);
-        painter.drawText(QRectF(t.pos.x() - currentRadius, t.pos.y() - currentRadius, currentRadius*2, currentRadius*2), Qt::AlignCenter, t.label);
+        painter.setBrush(c);
+        painter.drawEllipse(star.pos, star.size, star.size);
     }
+}
 
-    // ۵. خط نشانه‌گیر لیزری (Laser Sight)
-    painter.setPen(QPen(QColor(0, 242, 254, 80), 2, Qt::DashLine));
-    painter.drawLine(QPointF(width() / 2.0, height() - 40.0), m_mousePos);
-
-    // ۶. رسم گلوله‌های لیزری (Motion Blur effect)
-    painter.setPen(QPen(QColor(0, 242, 254), 4, Qt::SolidLine, Qt::RoundCap));
-    for (const auto& p : m_projectiles) {
-        painter.drawLine(p.pos, p.pos - (p.velocity * 1.5));
-    }
-
-    // ۷. رسم ذرات
-    for (const auto& part : m_particles) {
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(part.color.red(), part.color.green(), part.color.blue(), int(part.life * 255)));
-        painter.drawEllipse(part.pos, 4, 4);
-    }
-
-    // ۸. توپخانه سایبرپانک
+void SettingsWidget::drawTargetDrone(QPainter& painter, const SettingTarget& t) {
     painter.save();
+    painter.translate(t.pos);
+    
+    // اعمال فیزیک لهیدگی در جهت حرکت
+    qreal angle = std::atan2(t.velocity.y(), t.velocity.x()) * 180 / M_PI;
+    painter.rotate(angle);
+    painter.scale(t.stretch * t.hitScale, t.squash * t.hitScale);
+    painter.rotate(-angle); // برگرداندن چرخش برای رسم محتوا
+    
+    qreal r = t.radius;
+
+    // هاله نوری درون (Glow)
+    QRadialGradient glow(0, 0, r * 1.5);
+    glow.setColorAt(0, QColor(t.color.red(), t.color.green(), t.color.blue(), 100));
+    glow.setColorAt(1, Qt::transparent);
+    painter.setBrush(glow);
+    painter.setPen(Qt::NoPen);
+    painter.drawEllipse(QPointF(0,0), r*1.5, r*1.5);
+
+    // رسم حلقه‌های مداری سه بعدی فیک
+    painter.setBrush(Qt::NoBrush);
+    
+    // حلقه اول
+    painter.save();
+    painter.rotate(t.rotX);
+    painter.scale(1.0, 0.3);
+    painter.setPen(QPen(QColor(255, 255, 255, 120), 2.0));
+    painter.drawEllipse(QPointF(0,0), r, r);
+    painter.restore();
+    
+    // حلقه دوم
+    painter.save();
+    painter.rotate(t.rotY);
+    painter.scale(0.3, 1.0);
+    painter.setPen(QPen(t.color, 3.0));
+    painter.drawEllipse(QPointF(0,0), r, r);
+    painter.restore();
+
+    // هسته اصلی شیشه‌ای
+    painter.setPen(QPen(t.color, 2.0));
+    painter.setBrush(QColor(t.color.red(), t.color.green(), t.color.blue(), 30));
+    painter.drawEllipse(QPointF(0,0), r*0.8, r*0.8);
+
+    drawDroneVisuals(painter, t, r);
+
+    // سایه متن برای خوانایی
+    painter.setPen(QColor(0, 0, 0, 200));
+    painter.setFont(QFont("Consolas", 10, QFont::Bold));
+    painter.drawText(QRectF(-r, r*0.3, r*2, r), Qt::AlignCenter, t.label);
+    
+    painter.setPen(Qt::white);
+    painter.drawText(QRectF(-r, r*0.3 - 2, r*2, r), Qt::AlignCenter, t.label);
+
+    painter.restore();
+}
+
+void SettingsWidget::drawDroneVisuals(QPainter& painter, const SettingTarget& t, qreal r) {
+    // ویژوال‌های زنده داخل گوی
+    if (t.type == TargetType::VolUp || t.type == TargetType::VolDown) {
+        // اکولایزر ولوم
+        int bars = 10;
+        int activeBars = (m_volume * bars) / 100;
+        qreal barW = (r * 1.2) / bars;
+        qreal startX = -r * 0.6;
+        for(int i=0; i<bars; ++i) {
+            qreal barH = (std::sin(m_time * 5.0 + i) * 0.5 + 0.5) * (r * 0.5) + (r * 0.2);
+            QRectF barRect(startX + i*barW + 1, -barH*0.5 - 10, barW - 2, barH);
+            if (i < activeBars) {
+                painter.fillRect(barRect, t.color);
+            } else {
+                painter.fillRect(barRect, QColor(255,255,255,30));
+            }
+        }
+    } 
+    else if (t.type == TargetType::Fullscreen) {
+        // آیکون مانیتور
+        painter.setPen(QPen(Qt::white, 2.0));
+        painter.setBrush(m_fullscreen ? QColor(0, 242, 254, 100) : Qt::NoBrush);
+        painter.drawRect(QRectF(-r*0.4, -r*0.5, r*0.8, r*0.6));
+        painter.drawLine(QPointF(0, r*0.1), QPointF(0, r*0.3));
+        painter.drawLine(QPointF(-r*0.2, r*0.3), QPointF(r*0.2, r*0.3));
+    }
+    else if (t.type == TargetType::ThemeNeon || t.type == TargetType::ThemeArcade) {
+        // پرتال مینیاتوری چرخشی
+        int arcRot = int(m_time * 100) % 5760;
+        painter.setPen(QPen(t.color, 4.0));
+        painter.drawArc(QRectF(-r*0.4, -r*0.4, r*0.8, r*0.8), arcRot, 2880);
+    }
+}
+
+void SettingsWidget::drawLaserProjectiles(QPainter& painter) {
+    for (const auto& p : m_projectiles) {
+        // لیزر ضخیم و نورانی
+        painter.setPen(QPen(QColor(255, 255, 255, 200), 5, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(p.pos, p.pos - (p.velocity * 1.5));
+        
+        painter.setPen(QPen(p.color, 12, Qt::SolidLine, Qt::RoundCap));
+        painter.drawLine(p.pos, p.pos - (p.velocity * 1.0));
+    }
+}
+
+void SettingsWidget::drawParticles(QPainter& painter) {
+    for (const auto& part : m_particles) {
+        qreal ratio = part.life / part.maxLife;
+        painter.setPen(Qt::NoPen);
+        QColor c = part.color;
+        c.setAlpha(int(ratio * 255));
+        painter.setBrush(c);
+        painter.drawEllipse(part.pos, 4.0 * ratio, 4.0 * ratio);
+    }
+}
+
+void SettingsWidget::drawAdvancedCannon(QPainter& painter) {
+    painter.save();
+    // پایه توپ
     painter.translate(width() / 2.0, height() - 40.0);
+    
+    // اتصال لوله با احتساب لگد (Recoil)
     painter.rotate(qRadiansToDegrees(m_cannonAngle));
+    painter.translate(-m_cannonRecoil, 0); // لگد به عقب
     
-    // لوله توپ
-    painter.setBrush(QColor(15, 20, 30));
+    // رنگ لوله بر اساس حرارت
+    QColor barrelColor(15, 20, 30);
+    QColor heatColor = QColor(255, 50, 0);
+    
+    painter.setBrush(barrelColor);
     painter.setPen(QPen(QColor(0, 242, 254), 3));
-    painter.drawRect(0, -12, 50, 24);
+    painter.drawRect(0, -14, 60, 28);
     
-    // بدنه چرخشی
+    // درخشش حرارتی سر لوله
+    if (m_cannonHeat > 0) {
+        QLinearGradient hG(0, 0, 60, 0);
+        hG.setColorAt(0, Qt::transparent);
+        hG.setColorAt(1, QColor(heatColor.red(), heatColor.green(), heatColor.blue(), int(m_cannonHeat * 255)));
+        painter.setBrush(hG);
+        painter.setPen(Qt::NoPen);
+        painter.drawRect(0, -14, 60, 28);
+    }
+    
+    // هسته چرخان
+    painter.translate(m_cannonRecoil, 0); // برگرداندن لگد برای پایه
+    painter.rotate((m_isFiring ? m_time * 1000 : 0)); // چرخش هسته هنگام شلیک
+    
     painter.setBrush(QColor(30, 40, 60));
-    painter.drawEllipse(QPointF(0, 0), 25, 25);
-    // هسته نئونی
-    painter.setBrush(QColor(0, 242, 254));
-    painter.drawEllipse(QPointF(0, 0), 10, 10);
+    painter.setPen(QPen(Qt::white, 2));
+    painter.drawEllipse(QPointF(0, 0), 30, 30);
+    
+    // نماد انرژی داخل توپ
+    painter.setBrush(m_cannonHeat > 0.7 ? heatColor : QColor(0, 242, 254));
+    painter.drawPolygon(QPolygonF() << QPointF(0, -15) << QPointF(15, 15) << QPointF(-15, 15));
     
     painter.restore();
+
+    // خط نشانه‌گیر لیزری
+    if (!m_isFiring) {
+        painter.setPen(QPen(QColor(0, 242, 254, 80), 2, Qt::DashLine));
+        painter.drawLine(QPointF(width() / 2.0, height() - 40.0), m_mousePos);
+    }
+}
+
+void SettingsWidget::drawHUD(QPainter& painter) {
+    // خطوط اسکن‌لاین
+    painter.setPen(QPen(QColor(0, 0, 0, 40), 1.0));
+    for (int y = 0; y < height(); y += 3) {
+        painter.drawLine(0, y, width(), y);
+    }
+
+    // رابط هولوگرامی بالا
+    QRectF hudRect(20, 20, width() - 40, 70);
+    painter.setBrush(QColor(0, 242, 254, 20));
+    painter.setPen(QPen(QColor(0, 242, 254, 150), 2));
+    painter.drawRect(hudRect);
+    
+    // براکت‌های گوشه
+    painter.setPen(QPen(Qt::white, 3));
+    painter.drawLine(hudRect.topLeft(), hudRect.topLeft() + QPointF(15, 0));
+    painter.drawLine(hudRect.topLeft(), hudRect.topLeft() + QPointF(0, 15));
+    
+    painter.setPen(QColor(0, 242, 254, 255));
+    painter.setFont(QFont("Consolas", 16, QFont::Bold));
+    QString statusText = QString("[ SYSTEM OVERRIDE ]  VOL: %1%  |  DISP: %2  |  THEME: %3")
+                         .arg(m_volume)
+                         .arg(m_fullscreen ? "FULL" : "WIN")
+                         .arg(m_currentTheme.toUpper());
+    painter.drawText(hudRect, Qt::AlignCenter, statusText);
+}
+
+void SettingsWidget::drawGlitchSweep(QPainter& painter) {
+    // موج تغییر تم که از بالا به پایین میاد
+    qreal yPos = height() * m_glitchWave;
+    
+    // خط نورانی اصلی
+    painter.setPen(QPen(Qt::white, 5));
+    painter.drawLine(0, yPos, width(), yPos);
+    
+    // هاله اطراف خط
+    QLinearGradient g(0, yPos - 50, 0, yPos + 50);
+    g.setColorAt(0, Qt::transparent);
+    g.setColorAt(0.5, QColor(0, 255, 120, 150));
+    g.setColorAt(1, Qt::transparent);
+    painter.fillRect(0, yPos - 50, width(), 100, g);
+    
+    // شبکه‌ی هولوگرافیک دیجیتال (Grid) بالای خط
+    painter.setPen(QPen(QColor(0, 255, 120, 40), 1));
+    for (int y = 0; y < yPos; y += 40) {
+        painter.drawLine(0, y, width(), y);
+    }
+    for (int x = 0; x < width(); x += 40) {
+        painter.drawLine(x, 0, x, yPos);
+    }
 }

@@ -19,7 +19,7 @@ struct OrbitNode {
     qreal zDepth;         
 };
 
-struct Star {
+struct AdvBgStar {
     QPointF pos;
     qreal size;
     qreal phase; 
@@ -30,6 +30,7 @@ struct AdvParticle {
     QPointF pos;
     QPointF velocity;
     qreal life; 
+    qreal maxLife;
     QColor color;
 };
 
@@ -57,6 +58,10 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
+public:
+    Q_INVOKABLE void pauseAnimation() { if(m_timer) m_timer->stop(); }
+    Q_INVOKABLE void resumeAnimation() { if(m_timer && !m_timer->isActive()) m_timer->start(16); }
+
 private slots:
     void updateFrame();
 
@@ -66,7 +71,12 @@ private:
     void generateStars(int w, int h);
     void spawnParticles(const QPointF& pos, const QColor& color, int count, qreal speedMult = 1.0);
 
-    // توابع مینی‌گیم‌ها
+    // رندرینگ ماژولار و مینی‌گیم‌های ۴گانه
+    void drawNebulaAndAtmosphere(QPainter& painter);
+    void drawCentralQuantumCore(QPainter& painter, int cx, int cy, qreal radius);
+    void drawHUDTelemetry(QPainter& painter);
+    void drawTeslaLightning(QPainter& painter, const QPointF& start, const QPointF& end, const QColor& color);
+
     void updateAudioLauncher();
     void renderAudioLauncher(QPainter& painter);
     
@@ -81,8 +91,8 @@ private:
 
     QTimer* m_timer;
     QVector<OrbitNode> m_nodes;
-    QVector<Star> m_bgStars;
-    QVector<Star> m_constellationStars; 
+    QVector<AdvBgStar> m_bgStars;
+    QVector<AdvBgStar> m_constellationStars; 
     QList<QPolygonF> m_constellationPolys; 
     QVector<AdvParticle> m_particles; 
 
@@ -104,7 +114,7 @@ private:
     QRectF m_backButtonRect;
     bool m_backHovered = false;
 
-    // ================== AUDIO ==================
+    // ================== AUDIO (LAUNCHER) ==================
     bool m_isDraggingCannon = false;
     QPointF m_cannonBase;      
     QPointF m_dragPos;         
@@ -116,14 +126,14 @@ private:
     int m_currentTrackIndex = 0;
     QPointF m_trackCrystalPos;
 
-    // ================== GRAPHICS ==================
+    // ================== GRAPHICS (REACTOR) ==================
     QPointF m_reactorCorePos;
     QVector<ReactorCapsule> m_capsules;
     bool m_isDraggingCapsule = false;
     int m_draggedCapsuleIndex = -1;
     int m_graphicsQuality = 2; 
 
-    // ================== HAPTICS ==================
+    // ================== HAPTICS (SEISMOGRAPH) ==================
     QPointF m_anvilPos;
     QPointF m_weightPos;
     bool m_isDraggingWeight = false;
@@ -131,11 +141,13 @@ private:
     qreal m_weightVelY = 0.0;
     int m_shakeIntensity = 50; 
     qreal m_currentScreenShake = 0.0; 
+    QVector<qreal> m_seismoWaveHistory; // تاریخچه موج لرزه‌نگار
 
-    // ================== DISPLAY ==================
+    // ================== DISPLAY (GEARBOX) ==================
     QPointF m_gearCenter;
     qreal m_leverAngle = -110.0; 
     bool m_isDraggingLever = false;
     int m_fpsOptions[4] = {60, 120, 144, 999}; 
     int m_currentFpsIndex = 1;
+    qreal m_tachometerGaugeAngle = 0.0; // عقربه دور موتور / تاکومتر
 };
