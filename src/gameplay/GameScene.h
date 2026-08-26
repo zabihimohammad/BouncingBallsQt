@@ -4,12 +4,12 @@
 #include <QTimer>
 #include <QGraphicsEllipseItem>
 #include <QVector>
-#include <QRectF>
 #include "../core/GridManager.h"
 #include "BallItem.h"
 #include "CannonItem.h"
 #include "AimLineItem.h"
 
+// ساختار ذرات انفجاری نئونی
 struct GameParticle {
     QPointF pos;
     QPointF vel;
@@ -18,6 +18,7 @@ struct GameParticle {
     qreal size = 6.0;
 };
 
+// ساختار متن‌های امتیاز شناور
 struct FloatingScoreText {
     QPointF pos;
     QString text;
@@ -25,42 +26,35 @@ struct FloatingScoreText {
     qreal life = 1.0;
 };
 
+// ساختار پرتو لیزری سطر
+
 struct Shockwave {
     QPointF pos;
     qreal radius;
     qreal life;
     QColor color;
 };
-
 struct LaserRayEffect {
     qreal y;
     qreal life = 1.0;
 };
 
-struct SkillPod {
+struct SkillCard {
     BallType type;
-    QString name;
-    QString hotkey;
+    QString title;
+    QString desc;
     QColor color;
     int count;
     QRectF rect;
 };
 
-struct SatelliteNode {
-    QString id;
-    QString label;
-    QPointF center;
-    qreal radius = 22.0;
-    bool isHovered = false;
-};
-
 class GameScene : public QGraphicsScene {
 Q_OBJECT
 public:
-    static constexpr qreal SCENE_W = 1000.0;
-    static constexpr qreal SCENE_H = 700.0;
-    static constexpr qreal PLAYFIELD_W = 528.0; // 12 ستون x 44px
-    static constexpr qreal PLAYFIELD_X = (SCENE_W - PLAYFIELD_W) / 2.0; // 236.0 px (مرکز تقارن)
+    static constexpr qreal SCENE_W = 800.0;
+    static constexpr qreal SCENE_H = 600.0;
+    static constexpr qreal PLAYFIELD_X = 224.0;
+    static constexpr qreal PLAYFIELD_W = 352.0;
 
     explicit GameScene(const QString& username, const QString& mode = "Classic", int levelNumber = 1, QObject* parent = nullptr);
     ~GameScene() override;
@@ -90,32 +84,27 @@ private slots:
 
 private:
     void initGame();
-    void initSkillPods();
+    void initSkills();
     void fireBall();
     void snapBallToGrid(const QPointF& hitPos, BallColor color, BallType type);
-    void popMatches(int r, int c, BallColor color, BallType type, BallColor secColor = BallColor::None);
+    void popMatches(int r, int c, BallColor color, BallType type);
     void checkFloatingBalls();
     void redrawGrid();
     void prepareNextCannonBall();
     bool findBestSnapSlot(const QPointF& hitPos, int& outR, int& outC);
     void syncCannonColorsWithGrid();
-
-    // سیستم جلوه‌های ویژه
+    void popMatches(int r, int c, BallColor color, BallType type, BallColor secColor = BallColor::None);
+    // سیستم ذرات و افکت‌های بصری
     void spawnPopParticles(const QPointF& pos, const QColor& color, int count = 25);
     void spawnFloatingText(const QPointF& pos, const QString& text, const QColor& color = QColor(0, 242, 254));
     void triggerLaserBeamEffect(int row);
     void activateSkill(int index);
 
-    // ترسیم ماژولار کنسول هولوگرافیک
-    void drawDeepSpaceNebula(QPainter* painter);
-    void drawForceFieldPlayfield(QPainter* painter);
-    void drawTelemetryGlassHUD(QPainter* painter);
-    void drawSatelliteControls(QPainter* painter);
-    void drawOrbitalSkillPods(QPainter* painter);
-    void armSkill(int podIndex);
-    void disarmSkill();
-    int m_armedSkillIndex = -1;
-    BallColor m_savedBaseColor = BallColor::None; // رنگ توپ عادی قبل از انتخاب مهارت
+    // داشبورد
+    void drawLeftHUD(QPainter* painter);
+    void drawRightSkillPanel(QPainter* painter);
+    void drawPlayfieldFrame(QPainter* painter);
+
     QString m_username;
     QString m_mode;
     int m_levelNumber = 1;
@@ -138,23 +127,23 @@ private:
     int m_shotsFired = 0;
     int m_shotsHit = 0;
     int m_comboStreak = 0;
+    
     // --- Live HUD Telemetry ---
     qreal m_displayedScore = 0.0;
     qreal m_ecgPhase = 0.0;
     qreal m_dangerLevel = 0.0;
     qreal m_overdrivePhase = 0.0;
-    qreal m_overdriveCharge = 0.0;
     qreal m_aimAngleTelemetry = 0.0;
     int m_aimBouncesTelemetry = 0;
     qreal m_lowestGridY = 0.0;
     qreal m_gameplayTimeSeconds = 0.0;
     QPointF m_mouseHoverPos;
     // --------------------------
-    bool m_isPaused = false;
-    qreal m_time = 0.0;
 
-    QVector<SkillPod> m_skillPods;
-    QVector<SatelliteNode> m_satelliteNodes;
+    bool m_isPaused = false;
+    QVector<SkillCard> m_skills;
+
+    // بافرهای مدیریت افکت‌ها
     QVector<GameParticle> m_particles;
     QVector<FloatingScoreText> m_floatingTexts;
     QVector<LaserRayEffect> m_laserBeams;
