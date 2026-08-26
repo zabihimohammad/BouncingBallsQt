@@ -17,7 +17,7 @@ void AimLineItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* optio
 
     painter->setRenderHint(QPainter::Antialiasing);
 
-    QPen pen(QColor(56, 189, 248, 200), 2.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
+    QPen pen(QColor(0, 242, 254, 200), 2.5, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
     painter->setPen(pen);
 
     for (int i = 0; i < m_points.size() - 1; ++i) {

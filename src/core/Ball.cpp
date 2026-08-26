@@ -19,18 +19,12 @@ bool Ball::matches(const Ball* other) const {
 
 bool Ball::matches(BallColor otherColor, BallType otherType, BallColor otherSecColor) const {
     if (isEmpty() || otherColor == BallColor::None) return false;
-    if (m_isLocked) return false;
-
-    // توپ سیاه با هیچ توپی همرنگ نمی‌شود
+    if (m_isLocked || isFrozen()) return false;
     if (isBlack() || otherColor == BallColor::Black) return false;
 
-    // اگر هر کدام از دو توپ وایلدکارد (Rainbow) باشند
     if (m_type == BallType::Rainbow || otherType == BallType::Rainbow) return true;
-
-    // تطبیق مستقیم رنگ اصلی
     if (m_primaryColor == otherColor) return true;
 
-    // بررسی حالت‌های دو رنگ (DualColor)
     if (m_type == BallType::DualColor && m_secondaryColor == otherColor) return true;
     if (otherType == BallType::DualColor && (m_primaryColor == otherSecColor)) return true;
     if (m_type == BallType::DualColor && otherType == BallType::DualColor) {
@@ -53,7 +47,11 @@ QColor Ball::toQColor(BallColor color) {
 }
 
 QColor Ball::getDisplayColor() const {
-    if (m_isLocked) return QColor(149, 175, 192); // رنگ خاکستری قفل
+    if (m_isMystery) return QColor(99, 110, 114);
+    if (m_freezeLevel == 2) return QColor(116, 185, 255);
+    if (m_freezeLevel == 1) return QColor(160, 214, 255);
+    if (m_isLocked) return QColor(149, 175, 192);
+    if (m_isKey) return QColor(255, 215, 0);
     if (m_type == BallType::Rainbow) return QColor(255, 230, 0);
     if (m_type == BallType::Bomb) return QColor(231, 76, 60);
     if (m_type == BallType::Laser) return QColor(0, 210, 211);

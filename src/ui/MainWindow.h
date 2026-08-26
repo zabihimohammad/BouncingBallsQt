@@ -1,4 +1,5 @@
 #pragma once
+
 #include <QMainWindow>
 #include <QStackedWidget>
 #include <QKeyEvent>
@@ -11,9 +12,10 @@
 #include "ScoreboardWidget.h"
 #include "AdvancedSettingsWidget.h"
 #include "HelpWidget.h"
+#include "LevelSelectWidget.h"
 
 class MainWindow : public QMainWindow {
-    Q_OBJECT
+Q_OBJECT
 public:
     explicit MainWindow(QWidget* parent = nullptr);
 
@@ -21,7 +23,12 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
-    void startNewGame(const QString& username, const QString& mode);
+    // ۱. متد بررسی درخواست شروع بازی و تفکیک انتخاب مرحله
+    void handleLaunchRequest(const QString& username, const QString& mode);
+
+    // ۲. متد شروع بازی با پشتیبانی از شماره مرحله (پیش‌فرض = ۱)
+    void startNewGame(const QString& username, const QString& mode, int levelNumber = 1);
+
     void handleGameOver(int score);
     void handleGameWon(int score);
     void showPauseMenu();
@@ -33,8 +40,9 @@ private:
     StartGameWidget* m_startMenu;
     SettingsWidget* m_settingsWidget;
     ScoreboardWidget* m_scoreboardWidget;
-    AdvancedSettingsWidget* m_advSettingsWidget; // <--- اضافه شد
+    AdvancedSettingsWidget* m_advSettingsWidget;
     HelpWidget* m_helpWidget;
+    LevelSelectWidget* m_levelSelectWidget;
 
     GameView* m_gameView = nullptr;
     GameScene* m_gameScene = nullptr;
@@ -42,4 +50,5 @@ private:
 
     QString m_currentUser;
     QString m_currentMode;
+    int m_selectedLevel = 1;
 };

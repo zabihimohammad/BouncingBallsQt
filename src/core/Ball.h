@@ -3,7 +3,6 @@
 #include <QColor>
 #include <QPointF>
 
-// رنگ‌های پایه استاندارد
 enum class BallColor {
     None,
     Red,
@@ -11,16 +10,15 @@ enum class BallColor {
     Blue,
     Yellow,
     Purple,
-    Black       // توپ مشکی خنثی / ضد انفجار
+    Black
 };
 
-// رفتار و نقش عملیاتی توپ
 enum class BallType {
-    Regular,      // توپ عادی
-    DualColor,    // توپ دو رنگ
-    Rainbow,      // وایلدکارد (تطبیق با همه)
-    Bomb,         // انفجار شعاعی ۳x۳
-    Laser         // پاکسازی خطی افقی
+    Regular,
+    DualColor,
+    Rainbow,
+    Bomb,
+    Laser
 };
 
 class Ball {
@@ -32,7 +30,6 @@ public:
          int col = -1,
          bool isLocked = false);
 
-    // Getters & Setters
     BallColor getPrimaryColor() const { return m_primaryColor; }
     void setPrimaryColor(BallColor color) { m_primaryColor = color; }
 
@@ -46,22 +43,37 @@ public:
     int getCol() const { return m_col; }
     void setGridPos(int r, int c) { m_row = r; m_col = c; }
 
+    QPointF getPosition() const { return m_position; }
+    void setPosition(const QPointF &pos) { m_position = pos; }
+
     bool isLocked() const { return m_isLocked; }
     void setLocked(bool locked) { m_isLocked = locked; }
     void unlock() { m_isLocked = false; }
 
-    QPointF getPosition() const { return m_position; }
-    void setPosition(const QPointF &pos) { m_position = pos; }
+    bool isKey() const { return m_isKey; }
+    void setKey(bool key) { m_isKey = key; }
 
-    // متدهای وضعیت و منطق
+    int getFreezeLevel() const { return m_freezeLevel; }
+    void setFreezeLevel(int level) { m_freezeLevel = level; }
+    bool isFrozen() const { return m_freezeLevel > 0; }
+    bool damageIce() {
+        if (m_freezeLevel > 0) {
+            m_freezeLevel--;
+            return true;
+        }
+        return false;
+    }
+
+    bool isMystery() const { return m_isMystery; }
+    void setMystery(bool mystery) { m_isMystery = mystery; }
+    void revealMystery() { m_isMystery = false; }
+
     bool isEmpty() const { return m_primaryColor == BallColor::None; }
     bool isBlack() const { return m_primaryColor == BallColor::Black; }
 
-    // تطبیق هوشمند دوطرفه بین دو توپ یا با یک رنگ و نوع مشخص
     bool matches(const Ball* other) const;
     bool matches(BallColor color, BallType type = BallType::Regular, BallColor secColor = BallColor::None) const;
 
-    // توابع کمکی گرافیک و شانس
     QColor getDisplayColor() const;
     static QColor toQColor(BallColor color);
     static BallColor getRandomColor(int count = 5);
@@ -73,5 +85,8 @@ private:
     int m_row;
     int m_col;
     bool m_isLocked;
+    bool m_isKey = false;
+    int m_freezeLevel = 0;
+    bool m_isMystery = false;
     QPointF m_position;
 };
