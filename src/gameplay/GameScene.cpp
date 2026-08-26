@@ -40,6 +40,11 @@ void GameScene::initGame() {
     m_flyingBallItem->setZValue(15);
     m_flyingBallItem->setVisible(false);
 
+    m_particles.reserve(512);
+    m_floatingTexts.reserve(64);
+    m_shockwaves.reserve(32);
+    m_laserBeams.reserve(16);
+
     m_gameLoopTimer = new QTimer(this);
     connect(m_gameLoopTimer, &QTimer::timeout, this, &GameScene::updateGameLoop);
     m_gameLoopTimer->start(16);

@@ -5,10 +5,19 @@
 #include <QTime>
 #include <QTimer>
 #include <QRandomGenerator>
+#include <QOpenGLWidget>
+#include <QSurfaceFormat>
 #include <cmath>
 #include <algorithm>
 
 GameView::GameView(QWidget* parent) : QGraphicsView(parent) {
+    auto* glWidget = new QOpenGLWidget(this);
+    QSurfaceFormat format;
+    format.setSamples(4);
+    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    glWidget->setFormat(format);
+    setViewport(glWidget);
+
     setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     setRenderHints(QPainter::Antialiasing | QPainter::SmoothPixmapTransform | QPainter::TextAntialiasing);
@@ -17,6 +26,19 @@ GameView::GameView(QWidget* parent) : QGraphicsView(parent) {
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
     setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
+    setOptimizationFlags(QGraphicsView::DontAdjustForAntialiasing | QGraphicsView::DontSavePainterState);
+}
+
+void GameView::pauseAnimation() {
+    if (auto* gs = qobject_cast<GameScene*>(scene())) {
+        gs->pauseGame();
+    }
+}
+
+void GameView::resumeAnimation() {
+    if (auto* gs = qobject_cast<GameScene*>(scene())) {
+        gs->resumeGame();
+    }
 }
 
 void GameView::resizeEvent(QResizeEvent* event) {

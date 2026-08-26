@@ -8,6 +8,9 @@ Q_OBJECT
 public:
     explicit GameView(QWidget* parent = nullptr);
 
+    Q_INVOKABLE void pauseAnimation();
+    Q_INVOKABLE void resumeAnimation();
+
 public slots:
     void triggerShake(int intensity);
 
