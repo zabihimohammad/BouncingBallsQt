@@ -11,7 +11,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Bouncing Balls - Sharif CE Project");
     
     setMinimumSize(800, 600);
-    setStyleSheet("background-color: #1e272e;");
+    
     showFullScreen();
 
     m_stackedWidget = new QStackedWidget(this);
@@ -54,7 +54,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_helpWidget, &HelpWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
     
     // بازگشت از مینی‌گیم تنظیمات به منوی اصلی
-    connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { 
+        if (m_gameView && m_stackedWidget->indexOf(m_gameView) != -1) {
+            m_stackedWidget->setCurrentWidget(m_gameView);
+            if(m_gameScene) m_gameScene->pauseGame();
+            showPauseMenu();
+        } else {
+            m_stackedWidget->setCurrentIndex(0); 
+        }
+    });
     
     // شلیک به حباب PRO MODE -> رفتن به تنظیمات پیشرفته (ایندکس ۴)
     connect(m_settingsWidget, &SettingsWidget::proModeClicked, this, [this]() {
@@ -107,6 +115,7 @@ void MainWindow::startNewGame(const QString& username, const QString& mode) {
     connect(m_gameScene, &GameScene::gameOver, this, &MainWindow::handleGameOver);
     connect(m_gameScene, &GameScene::gameWon, this, &MainWindow::handleGameWon);
     connect(m_gameScene, &GameScene::pauseRequested, this, &MainWindow::showPauseMenu);
+    connect(m_gameScene, &GameScene::shakeRequested, m_gameView, &GameView::triggerShake);
 
     m_stackedWidget->addWidget(m_gameView);
     m_stackedWidget->setCurrentWidget(m_gameView);
@@ -123,6 +132,9 @@ void MainWindow::handleGameWon(int score) {
     m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
     auto dlg = new GameOverDialog(true, m_currentUser, score, this);
     connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
+    connect(dlg, &GameOverDialog::restartGame, this, [this]() {
+        startNewGame(m_currentUser, m_currentMode);
+    });
     dlg->exec();
 }
 
@@ -131,6 +143,10 @@ void MainWindow::showPauseMenu() {
     auto dlg = new PauseDialog(this);
     connect(dlg, &PauseDialog::resumeGame, this, [this]() { m_gameScene->resumeGame(); });
     connect(dlg, &PauseDialog::exitToMenu, this, &MainWindow::returnToMainMenu);
+    connect(dlg, &PauseDialog::openSettings, this, [this, dlg]() {
+        dlg->accept(); // Close dialog
+        m_stackedWidget->setCurrentWidget(m_settingsWidget);
+    });
     dlg->exec();
 }
 

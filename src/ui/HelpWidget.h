@@ -22,21 +22,28 @@ protected:
     void mousePressEvent(QMouseEvent* event) override;
     void mouseMoveEvent(QMouseEvent* event) override;
 
-private slots:
-    void switchTab(int index);
-
 private:
     void drawBackground(QPainter& p);
     void drawMenu(QPainter& p);
     void drawContent(QPainter& p);
     void drawNeonBackButton(QPainter& p);
+    
+    struct MenuItem {
+        QString text;
+        int type; // 0=Category, 1=Video
+        int videoIndex;
+        bool isExpanded;
+        int id;
+        QRectF rect;
+    };
+    QVector<MenuItem> m_menuItems;
+    void buildMenuTree();
 
-    int m_activeTab = 0; 
-    int m_hoveredTab = -1;
+    int m_activeVideoIndex = 0; 
+    int m_hoveredId = -1;
     
     QRectF m_backBtnRect;
     bool m_backHovered = false;
     
-    QVector<QRectF> m_tabRects;
     QMovie* m_movies[7];
 };

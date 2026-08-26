@@ -8,7 +8,7 @@
 #include <QKeyEvent>
 
 enum class TargetType { 
-    VolUp, VolDown, Fullscreen, ThemeNeon, ThemeArcade, EMP, BackToMenu, ProMode
+    VolUp, VolDown, Fullscreen, ThemeNeon, ThemeCosmic, ThemeSolar, ThemeMatrix, EMP, BackToMenu, ProMode
 };
 
 struct SettingTarget {

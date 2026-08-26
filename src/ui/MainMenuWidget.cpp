@@ -1,3 +1,4 @@
+#include "ThemeManager.h"
 #include "MainMenuWidget.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -462,7 +463,8 @@ void MainMenuWidget::paintEvent(QPaintEvent* event) {
 }
 
 void MainMenuWidget::drawHyperdriveTransition(QPainter& painter) {
-    painter.fillRect(rect(), QColor(5, 8, 15));
+    QColor bg = ThemeManager::instance().getPrimaryColor();
+    painter.fillRect(rect(), QColor(bg.red()/10, bg.green()/10, bg.blue()/10));
     QPointF center(width() / 2.0, height() / 2.0);
     
     for (const auto& b : m_bubbles) {
@@ -496,12 +498,13 @@ void MainMenuWidget::drawHyperdriveTransition(QPainter& painter) {
 }
 
 void MainMenuWidget::drawNebulaBackground(QPainter& painter) {
-    painter.fillRect(rect(), QColor(6, 9, 18));
+    QColor bg = ThemeManager::instance().getPrimaryColor();
+    painter.fillRect(rect(), QColor(bg.red()/12, bg.green()/12, bg.blue()/12));
     
     if (m_isVortexActive) {
         QRadialGradient vortex(m_mousePos, 320);
-        vortex.setColorAt(0.0, QColor(153, 51, 255, 70));
-        vortex.setColorAt(0.5, QColor(0, 242, 254, 30));
+        vortex.setColorAt(0.0, QColor(ThemeManager::instance().getSecondaryColor().red(), ThemeManager::instance().getSecondaryColor().green(), ThemeManager::instance().getSecondaryColor().blue(), 70));
+        vortex.setColorAt(0.5, QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 30));
         vortex.setColorAt(1.0, Qt::transparent);
         painter.fillRect(rect(), vortex);
     } else {
@@ -644,7 +647,7 @@ void MainMenuWidget::drawHolographicTitle(QPainter& painter) {
     painter.setPen(QColor(0, 0, 0, 160));
     painter.drawText(centerPos + QPointF(4, 4), text);
     
-    painter.setPen(QColor(0, 242, 254, 180));
+    painter.setPen(ThemeManager::instance().getPrimaryColor());
     painter.drawText(centerPos + QPointF(-3 + glitchOffset, 0), text);
     
     painter.setPen(QColor(255, 51, 102, 180));
@@ -654,7 +657,7 @@ void MainMenuWidget::drawHolographicTitle(QPainter& painter) {
     painter.drawText(centerPos, text);
     
     // کادربندی HUD لیزری
-    painter.setPen(QPen(QColor(0, 242, 254, 140), 1.5));
+    painter.setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 140), 1.5));
     qreal lineY1 = centerPos.y() - textRect.height() + 12;
     qreal lineY2 = centerPos.y() + 18;
     

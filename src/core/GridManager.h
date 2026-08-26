@@ -1,3 +1,4 @@
+#include <map>
 #pragma once
 
 #include "Ball.h"
@@ -50,6 +51,7 @@ public:
     bool isBottomReached() const;
     bool isCleared() const;
     std::vector<BallColor> getRemainingColors() const;
+    std::map<BallColor, int> getColorDistribution() const;
 
 private:
     std::vector<std::vector<Ball*>> m_grid;

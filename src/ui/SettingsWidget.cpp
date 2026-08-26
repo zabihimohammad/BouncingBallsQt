@@ -1,3 +1,4 @@
+#include "ThemeManager.h"
 #include "SettingsWidget.h"
 #include <QPainter>
 #include <QMouseEvent>
@@ -41,24 +42,23 @@ void SettingsWidget::initEnvironment() {
 
 void SettingsWidget::initTargets() {
     m_targets.clear();
-    auto rng = QRandomGenerator::global();
-    
-    auto addTarget = [&](TargetType type, QString label, QColor color, qreal radius) {
+    auto addTarget = [&](TargetType type, const QString& label, const QColor& color, qreal radius) {
         SettingTarget t;
-        t.type = type; t.label = label; t.color = color;
+        t.type = type;
+        t.label = label;
+        t.color = color;
         t.radius = radius;
-        t.pos = QPointF(-1000, -1000); 
-        t.rotSpeedX = (rng->bounded(60) - 30) / 10.0;
-        t.rotSpeedY = (rng->bounded(60) - 30) / 10.0;
-        t.rotSpeedZ = (rng->bounded(60) - 30) / 10.0;
         m_targets.append(t);
     };
 
-    addTarget(TargetType::VolUp, "VOL +", QColor(0, 255, 120), 55);
+    addTarget(TargetType::VolUp, "VOL +", QColor(50, 255, 100), 55);
     addTarget(TargetType::VolDown, "VOL -", QColor(255, 50, 80), 55);
     addTarget(TargetType::Fullscreen, "DISPLAY", QColor(0, 200, 255), 60);
-    addTarget(TargetType::ThemeNeon, "THEME\nNEON", QColor(255, 0, 255), 50);
-    addTarget(TargetType::ThemeArcade, "THEME\nARCADE", QColor(255, 200, 0), 50);
+    
+    addTarget(TargetType::ThemeNeon, "CYBER\nNEON", QColor(0, 242, 254), 45);
+    addTarget(TargetType::ThemeCosmic, "COSMIC\nVOID", QColor(192, 132, 252), 45);
+    addTarget(TargetType::ThemeSolar, "SOLAR\nFLARE", QColor(239, 68, 68), 45);
+    addTarget(TargetType::ThemeMatrix, "MATRIX\nGREEN", QColor(16, 185, 129), 45);
     addTarget(TargetType::EMP, "SHOCKWAVE", QColor(255, 120, 0), 45);
     addTarget(TargetType::ProMode, "PRO MODE", QColor(0, 255, 100), 65);
     addTarget(TargetType::BackToMenu, "EXIT", QColor(200, 200, 200), 50);
@@ -217,15 +217,7 @@ void SettingsWidget::handleTargetAction(TargetType type, const QPointF& hitPos) 
         SoundManager::instance().playPop();
         break;
             
-    case TargetType::ThemeArcade: 
-        if (m_currentTheme != "Retro Arcade") {
-            m_currentTheme = "Retro Arcade"; 
-            m_isGlitching = true;
-            m_glitchWave = 0.0;
-        }
-        triggerEMP(hitPos); 
-        SoundManager::instance().playPop();
-        break;
+    
             
     case TargetType::EMP: 
         triggerEMP(hitPos); 
@@ -411,7 +403,7 @@ void SettingsWidget::drawNebulaBackground(QPainter& painter) {
 
     // سحابی
     QRadialGradient neb(width()*0.5, height()*0.5, height());
-    QColor nC = (m_currentTheme == "Cyber Neon") ? QColor(0, 150, 255, 30) : QColor(255, 50, 100, 30);
+    QColor nC = ThemeManager::instance().getPrimaryColor(); nC.setAlpha(30);
     neb.setColorAt(0, nC);
     neb.setColorAt(1, Qt::transparent);
     painter.fillRect(rect(), neb);
@@ -509,7 +501,7 @@ void SettingsWidget::drawDroneVisuals(QPainter& painter, const SettingTarget& t,
         painter.drawLine(QPointF(0, r*0.1), QPointF(0, r*0.3));
         painter.drawLine(QPointF(-r*0.2, r*0.3), QPointF(r*0.2, r*0.3));
     }
-    else if (t.type == TargetType::ThemeNeon || t.type == TargetType::ThemeArcade) {
+    else if (t.type == TargetType::ThemeNeon || t.type == TargetType::ThemeCosmic || t.type == TargetType::ThemeSolar || t.type == TargetType::ThemeMatrix) {
         // پرتال مینیاتوری چرخشی
         int arcRot = int(m_time * 100) % 5760;
         painter.setPen(QPen(t.color, 4.0));
@@ -610,7 +602,7 @@ void SettingsWidget::drawHUD(QPainter& painter) {
     QString statusText = QString("[ SYSTEM OVERRIDE ]  VOL: %1%  |  DISP: %2  |  THEME: %3")
                          .arg(m_volume)
                          .arg(m_fullscreen ? "FULL" : "WIN")
-                         .arg(m_currentTheme.toUpper());
+                         .arg(ThemeManager::instance().themeName());
     painter.drawText(hudRect, Qt::AlignCenter, statusText);
 }
 

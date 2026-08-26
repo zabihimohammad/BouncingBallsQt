@@ -177,43 +177,91 @@ std::vector<std::pair<int, int>> GridManager::getNeighbors(int r, int c) const {
 }
 
 std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC, BallColor color, BallType type, BallColor secondaryColor) {
-    std::vector<std::pair<int, int>> matched;
-    if (!isOccupied(startR, startC)) return matched;
+    if (!isOccupied(startR, startC)) return {};
 
     Ball* startBall = m_grid[startR][startC];
-    BallColor matchColor = (color != BallColor::None) ? color : startBall->getPrimaryColor();
     BallType matchType = (color != BallColor::None) ? type : startBall->getType();
-    BallColor matchSecColor = (color != BallColor::None) ? secondaryColor : startBall->getSecondaryColor();
+    BallColor c1 = (color != BallColor::None) ? color : startBall->getPrimaryColor();
+    BallColor c2 = (color != BallColor::None) ? secondaryColor : startBall->getSecondaryColor();
 
-    std::set<std::pair<int, int>> visited;
-    std::queue<std::pair<int, int>> q;
+    // Helper lambda to find all connected matching balls for a given target color
+    auto findConnectedForColor = [&](BallColor targetColor) -> std::vector<std::pair<int, int>> {
+        if (targetColor == BallColor::None) return {};
+        
+        std::vector<std::pair<int, int>> matched;
+        std::set<std::pair<int, int>> visited;
+        std::queue<std::pair<int, int>> q;
 
-    q.push({startR, startC});
-    visited.insert({startR, startC});
+        q.push({startR, startC});
+        visited.insert({startR, startC});
 
-    while (!q.empty()) {
-        auto [r, c] = q.front();
-        q.pop();
-        matched.push_back({r, c});
+        while (!q.empty()) {
+            auto [r, c] = q.front();
+            q.pop();
+            matched.push_back({r, c});
 
-        for (auto [nr, nc] : getNeighbors(r, c)) {
-            if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
-                Ball* neighbor = m_grid[nr][nc];
-
-                // استفاده از متد داخلی matches کلاس Ball برای تمیزی معماری
-                if (neighbor->matches(matchColor, matchType, matchSecColor)) {
-                    visited.insert({nr, nc});
-                    q.push({nr, nc});
+            for (auto [nr, nc] : getNeighbors(r, c)) {
+                if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
+                    Ball* nb = m_grid[nr][nc];
+                    if (!nb->isLocked() && !nb->isBlack()) {
+                        // A neighbor matches if it has targetColor or is a Rainbow/Dual ball with targetColor
+                        bool matches = (nb->getPrimaryColor() == targetColor) ||
+                                       (nb->getType() == BallType::DualColor && nb->getSecondaryColor() == targetColor) ||
+                                       (nb->getType() == BallType::Rainbow);
+                        if (matches) {
+                            visited.insert({nr, nc});
+                            q.push({nr, nc});
+                        }
+                    }
                 }
             }
         }
-    }
+        return matched;
+    };
 
-    // حداقل ۳ توپ هم‌رنگ برای انفجار لازم است، مگر برای توپ وایلدکارد (Rainbow)
-    if (matched.size() < 3 && matchType != BallType::Rainbow) {
+    // 1. If Rainbow Ball: matches with all adjacent color clusters
+    if (matchType == BallType::Rainbow) {
+        std::set<std::pair<int, int>> allMatched;
+        allMatched.insert({startR, startC});
+        for (auto [nr, nc] : getNeighbors(startR, startC)) {
+            if (isOccupied(nr, nc)) {
+                Ball* nb = m_grid[nr][nc];
+                if (!nb->isLocked() && !nb->isBlack()) {
+                    auto sub = findConnectedForColor(nb->getPrimaryColor());
+                    if (sub.size() >= 2) { // 2 + rainbow = 3
+                        for (auto p : sub) allMatched.insert(p);
+                    }
+                }
+            }
+        }
+        if (allMatched.size() >= 3) {
+            return std::vector<std::pair<int, int>>(allMatched.begin(), allMatched.end());
+        }
         return {};
     }
-    return matched;
+
+    // 2. If Dual Color Ball: checks matches for c1 AND c2 independently!
+    if (matchType == BallType::DualColor) {
+        std::set<std::pair<int, int>> allMatched;
+        auto m1 = findConnectedForColor(c1);
+        if (m1.size() >= 3) {
+            for (auto p : m1) allMatched.insert(p);
+        }
+        if (c2 != BallColor::None && c2 != c1) {
+            auto m2 = findConnectedForColor(c2);
+            if (m2.size() >= 3) {
+                for (auto p : m2) allMatched.insert(p);
+            }
+        }
+        return std::vector<std::pair<int, int>>(allMatched.begin(), allMatched.end());
+    }
+
+    // 3. Regular Ball Matching (Single Color)
+    auto m = findConnectedForColor(c1);
+    if (m.size() >= 3) {
+        return m;
+    }
+    return {};
 }
 
 std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
@@ -318,4 +366,23 @@ std::vector<BallColor> GridManager::getRemainingColors() const {
         }
     }
     return std::vector<BallColor>(colors.begin(), colors.end());
+}
+std::map<BallColor, int> GridManager::getColorDistribution() const {
+    std::map<BallColor, int> counts;
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid[r][c]) {
+                Ball* b = m_grid[r][c];
+                BallColor col = b->getPrimaryColor();
+                if (col != BallColor::Black && col != BallColor::None) {
+                    counts[col]++;
+                }
+                if (b->getType() == BallType::DualColor && b->getSecondaryColor() != BallColor::None) {
+                    counts[b->getSecondaryColor()]++;
+                }
+            }
+        }
+    }
+    return counts;
 }

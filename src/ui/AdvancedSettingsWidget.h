@@ -44,6 +44,7 @@ struct ReactorCapsule {
 
 class AdvancedSettingsWidget : public QWidget {
     public:
+    public:
     Q_OBJECT
 public:
     explicit AdvancedSettingsWidget(QWidget* parent = nullptr);

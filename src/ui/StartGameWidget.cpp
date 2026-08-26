@@ -42,67 +42,13 @@ StartGameWidget::StartGameWidget(QWidget* parent) : QWidget(parent) {
     m_nameInput = new QLineEdit(this);
     m_nameInput->setPlaceholderText(">> ENTER OPERATIVE NAME <<");
     m_nameInput->setAlignment(Qt::AlignCenter);
-    m_nameInput->setStyleSheet(
-        "QLineEdit {"
-        "  background-color: rgba(0, 10, 20, 150);"
-        "  color: #00F2FE;"
-        "  border: 1px solid rgba(0, 242, 254, 100);"
-        "  border-left: 4px solid #00F2FE;"
-        "  border-right: 4px solid #00F2FE;"
-        "  font-family: 'Consolas', 'Segoe UI';"
-        "  font-size: 16px;"
-        "  font-weight: bold;"
-        "  letter-spacing: 2px;"
-        "}"
-        "QLineEdit:focus {"
-        "  background-color: rgba(0, 242, 254, 40);"
-        "  border-color: #00F2FE;"
-        "  color: #FFFFFF;"
-        "}"
-    );
 
     m_playBtn = new QPushButton("INITIATE LAUNCH SEQUENCE", this);
-    m_playBtn->setStyleSheet(
-        "QPushButton {"
-        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 rgba(239, 68, 68, 180), stop:0.5 rgba(220, 38, 38, 220), stop:1 rgba(239, 68, 68, 180));"
-        "  color: white;"
-        "  font-family: 'Segoe UI';"
-        "  font-size: 20px;"
-        "  font-weight: 900;"
-        "  border: 2px solid #FCA5A5;"
-        "  border-radius: 8px;"
-        "  letter-spacing: 2px;"
-        "}"
-        "QPushButton:hover {"
-        "  background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #F87171, stop:1 #EF4444);"
-        "  border: 2px solid white;"
-        "}"
-        "QPushButton:disabled {"
-        "  background: rgba(30, 30, 30, 150);"
-        "  border: 1px solid #555;"
-        "  color: #555;"
-        "}"
-    );
     m_playBtn->setEnabled(false);
     connect(m_playBtn, &QPushButton::clicked, this, &StartGameWidget::onPlayClicked);
 
     // دکمه بازگشت در پایین چپ
     m_backBtn = new QPushButton("◄ SYSTEM ABORT", this);
-    m_backBtn->setStyleSheet(
-        "QPushButton {"
-        "  background-color: transparent;"
-        "  color: #94A3B8;"
-        "  border: 1px solid #94A3B8;"
-        "  font-family: 'Consolas';"
-        "  font-weight: bold;"
-        "  border-radius: 4px;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: rgba(220, 38, 38, 80);"
-        "  color: #FCA5A5;"
-        "  border-color: #EF4444;"
-        "}"
-    );
     connect(m_backBtn, &QPushButton::clicked, this, &StartGameWidget::backClicked);
 
     initEnvironment();

@@ -1,4 +1,5 @@
 #include "CannonItem.h"
+#include "BallItem.h"
 #include <QRadialGradient>
 #include <cmath>
 
@@ -38,50 +39,8 @@ void CannonItem::swapBalls() {
 }
 
 void CannonItem::drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type, BallColor secColor) {
-    painter->save();
-
-    // رندر دوتکه برای توپ دو رنگ
-    if (type == BallType::DualColor) {
-        QLinearGradient dualGrad(center.x() - radius, center.y(), center.x() + radius, center.y());
-        QColor c1 = Ball::toQColor(color);
-        QColor c2 = Ball::toQColor(secColor != BallColor::None ? secColor : BallColor::Yellow);
-        dualGrad.setColorAt(0.0, c1);
-        dualGrad.setColorAt(0.48, c1);
-        dualGrad.setColorAt(0.52, c2);
-        dualGrad.setColorAt(1.0, c2);
-
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(dualGrad);
-        painter->drawEllipse(center, radius, radius);
-        painter->restore();
-        return;
-    }
-
-    QColor baseCol = Ball::toQColor(color);
-    if (type == BallType::Rainbow) baseCol = QColor(255, 230, 0);
-    else if (type == BallType::Bomb) baseCol = QColor(231, 76, 60);
-    else if (type == BallType::Laser) baseCol = QColor(0, 210, 211);
-
-    QRadialGradient grad(center.x() - radius * 0.3, center.y() - radius * 0.3, radius * 1.3);
-    grad.setColorAt(0.0, QColor(255, 255, 255, 230));
-    grad.setColorAt(0.35, baseCol);
-    grad.setColorAt(1.0, baseCol.darker(200));
-
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(grad);
-    painter->drawEllipse(center, radius, radius);
-
-    if (type == BallType::Bomb) {
-        painter->setPen(QPen(Qt::black, 2));
-        painter->setBrush(Qt::black);
-        painter->drawEllipse(center, radius * 0.35, radius * 0.35);
-    } else if (type == BallType::Rainbow) {
-        painter->setPen(QPen(Qt::white, 2, Qt::DotLine));
-        painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(center, radius * 0.6, radius * 0.6);
-    }
-
-    painter->restore();
+    // Delegate directly to the master BallItem::paintBall engine for 100% unified aesthetics!
+    BallItem::paintBall(painter, center, radius, color, type, secColor, false);
 }
 
 bool CannonItem::isNextBallClicked(const QPointF& localPos) const {
@@ -90,42 +49,68 @@ bool CannonItem::isNextBallClicked(const QPointF& localPos) const {
 }
 
 void CannonItem::triggerFireRecoil() {
-    m_recoilOffset = 14.0;       // پرتاب ۱۴ پیکسلی به عقب
-    m_muzzleFlashAlpha = 1.0;    // اوج روشنایی جرقه دهانه
+    m_recoilOffset = 14.0;
+    m_muzzleFlashAlpha = 1.0;
     update();
 }
+
 void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     Q_UNUSED(option);
     Q_UNUSED(widget);
     painter->setRenderHint(QPainter::Antialiasing);
 
-    // ۱. استهلاک نرم لگد و جرقه در هر چرخه ترسیم (Easing)
+    // 1. Easing for recoil and muzzle flash
     m_recoilOffset *= 0.82;
     if (m_recoilOffset < 0.2) m_recoilOffset = 0.0;
 
     m_muzzleFlashAlpha *= 0.78;
     if (m_muzzleFlashAlpha < 0.03) m_muzzleFlashAlpha = 0.0;
 
-    // ۲. پایه شلیک نئونی
+    // 2. Sci-Fi Mechanical Cannon Base
     QRadialGradient baseGlow(0, 0, 48);
-    baseGlow.setColorAt(0.0, QColor(30, 41, 59));
-    baseGlow.setColorAt(0.7, QColor(15, 23, 42));
-    baseGlow.setColorAt(1.0, QColor(56, 189, 248, 180));
+    baseGlow.setColorAt(0.0, QColor(10, 15, 30));
+    baseGlow.setColorAt(0.75, QColor(15, 23, 42));
+    baseGlow.setColorAt(1.0, QColor(0, 242, 254, 180));
 
     painter->setBrush(baseGlow);
-    painter->setPen(QPen(QColor(56, 189, 248), 2));
-    painter->drawEllipse(QPointF(0, 0), 40, 40);
+    painter->setPen(QPen(QColor(0, 242, 254), 2));
+    painter->drawEllipse(QPointF(0, 0), 42, 42);
 
-    // ۳. لوله توپ همراه با انیمیشن لگد (Recoil)
+    // Mechanical gear teeth around base
+    painter->setPen(QPen(QColor(148, 163, 184, 160), 2.5));
+    painter->save();
+    for (int i = 0; i < 8; ++i) {
+        painter->drawLine(QPointF(0, -38), QPointF(0, -44));
+        painter->rotate(45.0);
+    }
+    painter->restore();
+
+    // 3. Railgun Barrel
     painter->save();
     painter->rotate(-m_angle + 90.0);
-    painter->translate(0, m_recoilOffset); // حرکت به عقب در راستای لوله
+    painter->translate(0, m_recoilOffset);
 
-    painter->setBrush(QBrush(QColor(51, 65, 85)));
-    painter->setPen(QPen(QColor(148, 163, 184), 1.5));
-    painter->drawRoundedRect(-13, -52, 26, 52, 6, 6);
+    // Side rails
+    painter->setBrush(QBrush(QColor(30, 41, 59)));
+    painter->setPen(QPen(QColor(148, 163, 184), 2));
+    painter->drawRoundedRect(-18, -48, 10, 48, 3, 3);
+    painter->drawRoundedRect(8, -48, 10, 48, 3, 3);
 
-    // ۴. جرقه دهانه لوله شلیک (Muzzle Flash)
+    // Center Plasma track
+    QLinearGradient plasmaTrack(0, 0, 0, -50);
+    plasmaTrack.setColorAt(0.0, QColor(0, 242, 254, 100));
+    plasmaTrack.setColorAt(1.0, QColor(0, 242, 254, 250));
+    painter->setBrush(plasmaTrack);
+    painter->setPen(Qt::NoPen);
+    painter->drawRect(-6, -45, 12, 35);
+
+    // Reinforcement crossbars
+    painter->setBrush(Qt::NoBrush);
+    painter->setPen(QPen(QColor(255, 255, 255, 150), 2));
+    painter->drawLine(-15, -20, 15, -20);
+    painter->drawLine(-15, -35, 15, -35);
+
+    // 4. Muzzle Flash
     if (m_muzzleFlashAlpha > 0.01) {
         QRadialGradient flashGrad(0, -60, 26);
         flashGrad.setColorAt(0.0, QColor(255, 255, 255, int(m_muzzleFlashAlpha * 255)));
@@ -138,13 +123,18 @@ void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     }
     painter->restore();
 
-    // گلوله آماده شلیک در مرکز
-    drawBall(painter, QPointF(0, 0), 18.0, m_currentColor, m_currentType, m_currentSecColor);
+    // 5. Active Cannon Ball (Loaded in Chamber) - exact size as grid balls
+    drawBall(painter, QPointF(0, 0), 16.0, m_currentColor, m_currentType, m_currentSecColor);
 
-    // حلقه و گلوله بعدی در خشاب
-    painter->setPen(QPen(QColor(148, 163, 184, 120), 1.5, Qt::DashLine));
-    painter->setBrush(QColor(15, 23, 42, 160));
-    painter->drawEllipse(QPointF(-65, 0), 18, 18);
+    // 6. Next Ball in Queue (Chamber Magazine Pod)
+    painter->setPen(QPen(QColor(0, 242, 254, 140), 1.5, Qt::DashLine));
+    painter->setBrush(QColor(10, 16, 28, 180));
+    painter->drawEllipse(QPointF(-60, 0), 17, 17);
 
-    drawBall(painter, QPointF(-65, 0), 13.0, m_nextColor, m_nextType, m_nextSecColor);
-    }
+    // Next Ball text label
+    painter->setPen(QColor(148, 163, 184));
+    painter->setFont(QFont("Segoe UI", 6, QFont::Bold));
+    painter->drawText(QRectF(-80, 18, 40, 14), Qt::AlignCenter, "NEXT");
+
+    drawBall(painter, QPointF(-60, 0), 12.5, m_nextColor, m_nextType, m_nextSecColor);
+}

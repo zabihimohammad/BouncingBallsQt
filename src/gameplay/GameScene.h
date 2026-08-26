@@ -5,6 +5,7 @@
 #include <QGraphicsEllipseItem>
 #include <QVector>
 #include "../core/GridManager.h"
+#include "BallItem.h"
 #include "CannonItem.h"
 #include "AimLineItem.h"
 
@@ -26,6 +27,13 @@ struct FloatingScoreText {
 };
 
 // ساختار پرتو لیزری سطر
+
+struct Shockwave {
+    QPointF pos;
+    qreal radius;
+    qreal life;
+    QColor color;
+};
 struct LaserRayEffect {
     qreal y;
     qreal life = 1.0;
@@ -54,12 +62,15 @@ public:
     void pauseGame();
     void resumeGame();
     int getScore() const { return m_score; }
+    qreal getAccuracyRatio() const { return m_shotsFired > 0 ? (static_cast<qreal>(m_shotsHit) / m_shotsFired) : 0.5; }
+    int getComboStreak() const { return m_comboStreak; }
 
 signals:
     void gameWon(int score);
     void gameOver(int score);
     void scoreChanged(int score);
     void pauseRequested();
+    void shakeRequested(int intensity);
 
 protected:
     void mouseMoveEvent(QGraphicsSceneMouseEvent* event) override;
@@ -87,6 +98,7 @@ private:
     void spawnPopParticles(const QPointF& pos, const QColor& color, int count = 25);
     void spawnFloatingText(const QPointF& pos, const QString& text, const QColor& color = QColor(0, 242, 254));
     void triggerLaserBeamEffect(int row);
+    void activateSkill(int index);
 
     // داشبورد
     void drawLeftHUD(QPainter* painter);
@@ -108,12 +120,25 @@ private:
     BallColor m_flyingSecondaryColor = BallColor::None;
     BallColor m_loadedSecondaryColor = BallColor::None;
     BallType m_flyingType = BallType::Regular;
-    QGraphicsEllipseItem* m_flyingBallItem = nullptr;
+    BallItem* m_flyingBallItem = nullptr;
 
     int m_score = 0;
     int m_shotsFired = 0;
     int m_shotsHit = 0;
     int m_comboStreak = 0;
+    
+    // --- Live HUD Telemetry ---
+    qreal m_displayedScore = 0.0;
+    qreal m_ecgPhase = 0.0;
+    qreal m_dangerLevel = 0.0;
+    qreal m_overdrivePhase = 0.0;
+    qreal m_aimAngleTelemetry = 0.0;
+    int m_aimBouncesTelemetry = 0;
+    qreal m_lowestGridY = 0.0;
+    qreal m_gameplayTimeSeconds = 0.0;
+    QPointF m_mouseHoverPos;
+    // --------------------------
+
     bool m_isPaused = false;
     QVector<SkillCard> m_skills;
 
@@ -121,4 +146,6 @@ private:
     QVector<GameParticle> m_particles;
     QVector<FloatingScoreText> m_floatingTexts;
     QVector<LaserRayEffect> m_laserBeams;
+    QVector<Shockwave> m_shockwaves;
+    QVector<QPointF> m_trail;
 };

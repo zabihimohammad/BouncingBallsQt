@@ -1,3 +1,4 @@
+#include "../ui/ThemeManager.h"
 #include "GameScene.h"
 #include "../core/SoundManager.h"
 #include <QGraphicsSceneMouseEvent>
@@ -34,7 +35,8 @@ void GameScene::initGame() {
     m_cannon->swapBalls();
     prepareNextCannonBall();
 
-    m_flyingBallItem = addEllipse(0, 0, GridManager::BALL_DIAMETER, GridManager::BALL_DIAMETER);
+    m_flyingBallItem = new BallItem(BallColor::None, BallType::Regular, BallColor::None, false, GridManager::BALL_RADIUS);
+    addItem(m_flyingBallItem);
     m_flyingBallItem->setZValue(15);
     m_flyingBallItem->setVisible(false);
 
@@ -48,7 +50,7 @@ void GameScene::initGame() {
 void GameScene::initSkills() {
     m_skills.clear();
     m_skills.append({BallType::Bomb, "BOMB", "Explodes 3x3 Area", QColor(231, 76, 60), 2, QRectF(595, 140, 185, 80)});
-    m_skills.append({BallType::Laser, "LASER BEAM", "Clears Top Row", QColor(0, 210, 211), 2, QRectF(595, 235, 185, 80)});
+    m_skills.append({BallType::Laser, "LASER BEAM", "Clears Top Row", ThemeManager::instance().getPrimaryColor(), 2, QRectF(595, 235, 185, 80)});
     m_skills.append({BallType::Rainbow, "RAINBOW", "Wildcard Match", QColor(255, 204, 0), 2, QRectF(595, 330, 185, 80)});
     m_skills.append({BallType::DualColor, "DUAL ORB", "Splits Two Colors", QColor(165, 94, 234), 3, QRectF(595, 425, 185, 80)});
 }
@@ -115,28 +117,80 @@ void GameScene::triggerLaserBeamEffect(int row) {
     m_laserBeams.append({beamY, 1.0});
 }
 
-void GameScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
-    if (m_isPaused) return;
 
-    QPointF mousePos = event->scenePos();
-    QPointF cannonPos = m_cannon->pos();
-
-    qreal angle = std::atan2(cannonPos.y() - mousePos.y(), mousePos.x() - cannonPos.x()) * 180.0 / M_PI;
-    angle = std::clamp(angle, 15.0, 165.0);
-
-    m_cannon->setAngle(angle);
-
-    if (!m_isFlying) {
-        m_aimLine->updateAim(cannonPos, angle);
-    }
-
-    QGraphicsScene::mouseMoveEvent(event);
-}
-
-void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+void GameScene::activateSkill(int index) {
+    if (index < 0 || index >= m_skills.size()) return;
     if (m_isPaused || m_isFlying) return;
 
+    auto& skill = m_skills[index];
+    if (skill.count <= 0) return;
+
+    skill.count--;
+    if (skill.type == BallType::DualColor) {
+        auto rem = m_grid.getRemainingColors();
+        BallColor c1 = BallColor::Red;
+        BallColor c2 = BallColor::Blue;
+
+        if (rem.size() >= 2) {
+            int idx1 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size()));
+            int idx2 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size() - 1));
+            if (idx2 >= idx1) idx2++;
+            c1 = rem[idx1];
+            c2 = rem[idx2];
+        } else if (rem.size() == 1) {
+            c1 = rem[0];
+            c2 = (c1 == BallColor::Red) ? BallColor::Blue : BallColor::Red;
+        } else {
+            c1 = Ball::getRandomColor(5);
+            do { c2 = Ball::getRandomColor(5); } while (c2 == c1);
+        }
+        m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
+    } else {
+        BallColor activeCol = (skill.type == BallType::Rainbow) ? BallColor::None : m_cannon->getCurrentColor();
+        m_cannon->setCurrentBall(activeCol, skill.type);
+        m_loadedSecondaryColor = BallColor::None;
+    }
+    SoundManager::instance().playShoot();
+    spawnPopParticles(skill.rect.center(), skill.color, 16);
+    update();
+}
+
+void GameScene::mouseMoveEvent(QGraphicsSceneMouseEvent* event) {
     QPointF pos = event->scenePos();
+    m_mouseHoverPos = pos;
+
+    if (!m_isPaused && !m_isFlying && m_cannon) {
+        QPointF cannonCenter = m_cannon->pos();
+        QPointF dir = pos - cannonCenter;
+        qreal angle = std::atan2(-dir.y(), dir.x()) * 180.0 / M_PI;
+
+        if (angle < 10.0) angle = 10.0;
+        if (angle > 170.0) angle = 170.0;
+
+        m_cannon->setAngle(angle);
+
+        // RESTORE THE AIM LINE TRAJECTORY CALCULATION!
+        if (m_aimLine) {
+            m_aimLine->updateAim(m_cannon->pos(), angle);
+        }
+
+        m_aimAngleTelemetry = angle;
+        m_aimBouncesTelemetry = (std::abs(90 - angle) > 30) ? (std::abs(90 - angle) > 60 ? 2 : 1) : 0;
+    }
+    update();
+    QGraphicsScene::mouseMoveEvent(event);
+}
+void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
+    QPointF pos = event->scenePos();
+
+    if (event->button() == Qt::LeftButton) {
+        if (QRectF(12, 410, 195, 45).contains(pos)) {
+            emit pauseRequested();
+            return;
+        }
+    }
+
+    if (m_isPaused || m_isFlying) return;
 
     if (event->button() == Qt::RightButton) {
         m_cannon->swapBalls();
@@ -145,44 +199,9 @@ void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     }
 
     if (event->button() == Qt::LeftButton) {
-        for (auto& skill : m_skills) {
-            if (skill.rect.contains(pos)) {
-                if (skill.count > 0) {
-                    skill.count--;
-                    if (skill.type == BallType::DualColor) {
-                        auto rem = m_grid.getRemainingColors();
-                        BallColor c1 = BallColor::Red;
-                        BallColor c2 = BallColor::Blue;
-
-                        if (rem.size() >= 2) {
-                            // انتخاب دو رنگ کاملاً تصادفی و غیرتکراری از بین رنگ‌های فعال زمین
-                            int idx1 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size()));
-                            int idx2 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size() - 1));
-                            if (idx2 >= idx1) idx2++; // تضمین متفاوت بودن دو اندیس
-
-                            c1 = rem[idx1];
-                            c2 = rem[idx2];
-                        } else if (rem.size() == 1) {
-                            c1 = rem[0];
-                            // اگر فقط یک رنگ در زمین بود، رنگ دوم یک رنگ مکمل متفاوت باشد
-                            c2 = (c1 == BallColor::Red) ? BallColor::Blue : BallColor::Red;
-                        } else {
-                            c1 = Ball::getRandomColor(5);
-                            do {
-                                c2 = Ball::getRandomColor(5);
-                            } while (c2 == c1);
-                        }
-
-                        m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
-                    } else {
-                        BallColor activeCol = (skill.type == BallType::Rainbow) ? BallColor::None : m_cannon->getCurrentColor();
-                        m_cannon->setCurrentBall(activeCol, skill.type);
-                        m_loadedSecondaryColor = BallColor::None;
-                    }
-                    SoundManager::instance().playShoot();
-                    spawnPopParticles(skill.rect.center(), skill.color, 15);
-                    update();
-                }
+        for (int i = 0; i < m_skills.size(); ++i) {
+            if (m_skills[i].rect.contains(pos)) {
+                activateSkill(i);
                 return;
             }
         }
@@ -201,7 +220,6 @@ void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
 
     QGraphicsScene::mousePressEvent(event);
 }
-
 void GameScene::keyPressEvent(QKeyEvent* event) {
     if (event->key() == Qt::Key_Escape) {
         emit pauseRequested();
@@ -209,10 +227,16 @@ void GameScene::keyPressEvent(QKeyEvent* event) {
         if (!m_isFlying) {
             m_cannon->swapBalls();
         }
+    } else if (event->key() == Qt::Key_1) {
+        activateSkill(0);
+    } else if (event->key() == Qt::Key_2) {
+        activateSkill(1);
+    } else if (event->key() == Qt::Key_3) {
+        activateSkill(2);
+    } else if (event->key() == Qt::Key_4) {
+        activateSkill(3);
     }
-    QGraphicsScene::keyPressEvent(event);
 }
-
 void GameScene::fireBall() {
     m_isFlying = true;
     m_aimLine->clearAim();
@@ -227,29 +251,8 @@ void GameScene::fireBall() {
     qreal speed = 15.0;
     m_flyingVel = QPointF(std::cos(rad) * speed, -std::sin(rad) * speed);
 
-    m_flyingBallItem->setRect(-GridManager::BALL_RADIUS, -GridManager::BALL_RADIUS,
-                              GridManager::BALL_DIAMETER, GridManager::BALL_DIAMETER);
     m_flyingBallItem->setPos(m_flyingPos);
-    m_flyingBallItem->setPen(Qt::NoPen);
-
-    // گرادیان دوتکه برای پرتابه در حال پرواز
-    if (m_flyingType == BallType::DualColor) {
-        QLinearGradient dualGrad(-GridManager::BALL_RADIUS, 0, GridManager::BALL_RADIUS, 0);
-        QColor c1 = Ball::toQColor(m_flyingColor);
-        QColor c2 = Ball::toQColor(m_flyingSecondaryColor);
-        dualGrad.setColorAt(0.0, c1);
-        dualGrad.setColorAt(0.48, c1);
-        dualGrad.setColorAt(0.52, c2);
-        dualGrad.setColorAt(1.0, c2);
-        m_flyingBallItem->setBrush(dualGrad);
-    } else {
-        QColor flyColor = Ball::toQColor(m_flyingColor);
-        if (m_flyingType == BallType::Rainbow) flyColor = QColor(255, 204, 0);
-        else if (m_flyingType == BallType::Bomb) flyColor = QColor(231, 76, 60);
-        else if (m_flyingType == BallType::Laser) flyColor = QColor(0, 210, 211);
-        m_flyingBallItem->setBrush(flyColor);
-    }
-
+    m_flyingBallItem->updateData(m_flyingColor, m_flyingType, m_flyingSecondaryColor, false);
     m_flyingBallItem->setVisible(true);
 
     m_cannon->setCurrentBall(m_cannon->getNextColor(), m_cannon->getNextType(), m_cannon->getNextSecondaryColor());
@@ -262,7 +265,37 @@ void GameScene::fireBall() {
 void GameScene::updateGameLoop() {
     if (m_isPaused) return;
 
-    // ۱. آپدیت پارتیکل‌ها
+    // --- Live HUD Telemetry Update ---
+    m_gameplayTimeSeconds += 0.016;
+    m_displayedScore += (m_score - m_displayedScore) * 0.15;
+    if (std::abs(m_score - m_displayedScore) < 0.5) m_displayedScore = m_score;
+    
+    // Calculate Danger Level
+    int lowestRow = 0;
+    for (int r = GridManager::ROWS - 1; r >= 0; --r) {
+        bool rowHasBall = false;
+        int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid.isOccupied(r, c)) { rowHasBall = true; break; }
+        }
+        if (rowHasBall) { lowestRow = r; break; }
+    }
+    m_dangerLevel = static_cast<qreal>(lowestRow) / (GridManager::ROWS - 2.0);
+    if (m_dangerLevel > 1.0) m_dangerLevel = 1.0;
+    
+    m_lowestGridY = lowestRow * GridManager::BALL_DIAMETER;
+    m_ecgPhase += (m_dangerLevel > 0.6 ? 0.3 : 0.08);
+    m_overdrivePhase += 0.1;
+    // ---------------------------------
+
+    // ۱. آپدیت پارتیکل‌ها و شوک‌ویوها
+    for (auto& sw : m_shockwaves) {
+        sw.radius += 8.0;
+        sw.life -= 0.04;
+    }
+    m_shockwaves.erase(std::remove_if(m_shockwaves.begin(), m_shockwaves.end(),
+                                     [](const Shockwave& sw) { return sw.life <= 0; }), m_shockwaves.end());
+
     for (auto& p : m_particles) {
         p.pos += p.vel;
         p.vel.setY(p.vel.y() + 0.12); // گرانش جزئی
@@ -297,12 +330,12 @@ void GameScene::updateGameLoop() {
             m_flyingPos.setX(leftWall);
             m_flyingVel.setX(-m_flyingVel.x());
             SoundManager::instance().playBounce();
-            spawnPopParticles(m_flyingPos, QColor(0, 242, 254), 6);
+            spawnPopParticles(m_flyingPos, ThemeManager::instance().getPrimaryColor(), 6);
         } else if (m_flyingPos.x() >= rightWall) {
             m_flyingPos.setX(rightWall);
             m_flyingVel.setX(-m_flyingVel.x());
             SoundManager::instance().playBounce();
-            spawnPopParticles(m_flyingPos, QColor(0, 242, 254), 6);
+            spawnPopParticles(m_flyingPos, ThemeManager::instance().getPrimaryColor(), 6);
         }
 
         bool collided = false;
@@ -329,6 +362,7 @@ void GameScene::updateGameLoop() {
         if (collided) {
             m_isFlying = false;
             m_flyingBallItem->setVisible(false);
+            m_trail.clear();
             QPointF localHitPos(m_flyingPos.x() - PLAYFIELD_X, m_flyingPos.y());
             snapBallToGrid(localHitPos, m_flyingColor, m_flyingType);
         } else {
@@ -399,13 +433,13 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 for (int colIdx = 0; colIdx < cols; ++colIdx) {
                     if (m_grid.isOccupied(targetRow, colIdx)) {
                         QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(targetRow, colIdx);
-                        spawnPopParticles(pCenter, QColor(0, 210, 211), 16);
+                        spawnPopParticles(pCenter, ThemeManager::instance().getPrimaryColor(), 16);
                         m_grid.removeBall(targetRow, colIdx);
                         m_score += 25;
                     }
                 }
                 spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, targetRow * 38.0 + 20.0),
-                                  "LASER CLEARED!", QColor(0, 210, 211));
+                                  "LASER CLEARED!", ThemeManager::instance().getPrimaryColor());
             }
             m_grid.removeBall(r, c);
             SoundManager::instance().playPop();
@@ -421,6 +455,9 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
         checkFloatingBalls();
         redrawGrid();
         syncCannonColorsWithGrid();
+        if (m_aimLine && m_cannon) {
+            m_aimLine->updateAim(m_cannon->pos(), m_cannon->getAngle());
+        }
         emit scoreChanged(m_score);
 
         if (m_grid.isBottomReached()) {
@@ -452,11 +489,16 @@ void GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
         }
 
         QPointF textPos = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
+        m_shockwaves.append({textPos, 20.0, 1.0, Ball::toQColor(color)});
+        if (matches.size() >= 3) {
+            emit shakeRequested(matches.size() * 3);
+        }
+        
         QString scoreStr = QString("+%1").arg(totalGained);
         if (m_comboStreak > 1) {
             scoreStr += QString(" (x%1 COMBO!)").arg(m_comboStreak);
         }
-        spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : QColor(0, 242, 254));
+        spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
     } else {
         m_comboStreak = 0;
     }
@@ -481,11 +523,16 @@ void GameScene::popMatches(int r, int c, BallColor color, BallType type) {
         }
 
         QPointF textPos = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
+        m_shockwaves.append({textPos, 20.0, 1.0, Ball::toQColor(color)});
+        if (matches.size() >= 3) {
+            emit shakeRequested(matches.size() * 3);
+        }
+        
         QString scoreStr = QString("+%1").arg(totalGained);
         if (m_comboStreak > 1) {
             scoreStr += QString(" (x%1 COMBO!)").arg(m_comboStreak);
         }
-        spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : QColor(0, 242, 254));
+        spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
     } else {
         m_comboStreak = 0;
     }
@@ -509,7 +556,7 @@ void GameScene::checkFloatingBalls() {
 
 void GameScene::redrawGrid() {
     for (auto* item : items()) {
-        if (item != m_cannon && item != m_aimLine && item != m_flyingBallItem) {
+        if (item->data(0).toString() == "grid_ball") {
             removeItem(item);
             delete item;
         }
@@ -524,26 +571,11 @@ void GameScene::redrawGrid() {
                 qreal drawX = PLAYFIELD_X + center.x() - GridManager::BALL_RADIUS;
                 qreal drawY = center.y() - GridManager::BALL_RADIUS;
 
-                QBrush ballBrush;
-                if (b->getType() == BallType::DualColor) {
-                    QLinearGradient dualGrad(drawX, drawY, drawX + GridManager::BALL_DIAMETER, drawY);
-                    QColor c1 = Ball::toQColor(b->getPrimaryColor());
-                    QColor c2 = Ball::toQColor(b->getSecondaryColor());
-                    dualGrad.setColorAt(0.0, c1);
-                    dualGrad.setColorAt(0.48, c1);
-                    dualGrad.setColorAt(0.52, c2);
-                    dualGrad.setColorAt(1.0, c2);
-                    ballBrush = QBrush(dualGrad);
-                } else {
-                    ballBrush = QBrush(b->getDisplayColor());
-                }
-
-                auto* ellipse = addEllipse(drawX, drawY,
-                                           GridManager::BALL_DIAMETER,
-                                           GridManager::BALL_DIAMETER,
-                                           Qt::NoPen,
-                                           ballBrush);
-                ellipse->setZValue(1);
+                auto* ballItem = new BallItem(b, GridManager::BALL_RADIUS);
+                ballItem->setPos(drawX + GridManager::BALL_RADIUS, drawY + GridManager::BALL_RADIUS);
+                addItem(ballItem);
+                ballItem->setZValue(1);
+                ballItem->setData(0, "grid_ball");
             }
         }
     }
@@ -555,10 +587,16 @@ void GameScene::redrawGrid() {
 void GameScene::drawBackground(QPainter* painter, const QRectF& rect) {
     Q_UNUSED(rect);
     painter->setRenderHint(QPainter::Antialiasing);
-    painter->fillRect(0, 0, SCENE_W, SCENE_H, QColor(8, 12, 22));
 
+    // Completely transparent scene background so the Cyber-Tunnel is fully visible!
+
+    // 1. Translucent Playfield Chamber & Neon Laser Rails
     drawPlayfieldFrame(painter);
+
+    // 2. Floating Modular Telemetry Cards (Left)
     drawLeftHUD(painter);
+
+    // 3. Floating Modular Cyber-Arsenal Cards (Right)
     drawRightSkillPanel(painter);
 }
 
@@ -569,11 +607,39 @@ void GameScene::drawForeground(QPainter* painter, const QRectF& rect) {
     // ۱. رسم پرتو لیزری نئونی افقی
     for (const auto& lb : m_laserBeams) {
         int alpha = int(lb.life * 255);
-        painter->setPen(QPen(QColor(0, 210, 211, alpha), 8.0, Qt::SolidLine, Qt::RoundCap));
+        painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), alpha), 8.0, Qt::SolidLine, Qt::RoundCap));
         painter->drawLine(QPointF(PLAYFIELD_X + 10, lb.y), QPointF(PLAYFIELD_X + PLAYFIELD_W - 10, lb.y));
 
         painter->setPen(QPen(QColor(255, 255, 255, alpha), 3.0, Qt::SolidLine, Qt::RoundCap));
         painter->drawLine(QPointF(PLAYFIELD_X + 10, lb.y), QPointF(PLAYFIELD_X + PLAYFIELD_W - 10, lb.y));
+    }
+
+    // Trail
+    if (m_trail.size() > 1) {
+        QPainterPath trailPath;
+        trailPath.moveTo(m_trail.first());
+        for (int i = 1; i < m_trail.size(); ++i) {
+            trailPath.lineTo(m_trail[i]);
+        }
+        painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 150), 18.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPath(trailPath);
+        painter->setPen(QPen(QColor(255, 255, 255, 200), 6.0, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter->drawPath(trailPath);
+    }
+
+    // Shockwaves
+    for (const auto& sw : m_shockwaves) {
+        int alpha = int(sw.life * 255);
+        QColor col = sw.color;
+        col.setAlpha(alpha);
+        painter->setPen(QPen(col, 4.0));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawEllipse(sw.pos, sw.radius, sw.radius);
+        
+        QColor colGlow = sw.color;
+        colGlow.setAlpha(alpha / 2);
+        painter->setPen(QPen(colGlow, 10.0));
+        painter->drawEllipse(sw.pos, sw.radius, sw.radius);
     }
 
     // ۲. رسم ذرات انفجاری نئونی
@@ -603,111 +669,362 @@ void GameScene::drawForeground(QPainter* painter, const QRectF& rect) {
 }
 
 void GameScene::drawPlayfieldFrame(QPainter* painter) {
+    // 1. Highly Translucent Frosted Glass Chamber (Allows Cyber-Tunnel to show through!)
     QRectF playfieldRect(PLAYFIELD_X, 0, PLAYFIELD_W, SCENE_H);
-    painter->setPen(QPen(QColor(56, 189, 248, 60), 2));
-    painter->setBrush(QColor(15, 23, 42, 220));
+    
+    QLinearGradient glassGrad(PLAYFIELD_X, 0, PLAYFIELD_X, SCENE_H);
+    QColor cBg = ThemeManager::instance().getPrimaryColor();
+    glassGrad.setColorAt(0.0, QColor(cBg.red()/4, cBg.green()/4, cBg.blue()/4, 70));
+    glassGrad.setColorAt(0.5, QColor(cBg.red()/8, cBg.green()/8, cBg.blue()/8, 45));
+    glassGrad.setColorAt(1.0, QColor(cBg.red()/4, cBg.green()/4, cBg.blue()/4, 70));
+    painter->setBrush(glassGrad);
+    painter->setPen(Qt::NoPen);
     painter->drawRect(playfieldRect);
 
-    qreal dangerY = GridManager::BALL_RADIUS + (GridManager::ROWS - 1) * (GridManager::BALL_DIAMETER * 0.866025);
-    painter->setPen(QPen(QColor(239, 68, 68, 120), 1.5, Qt::DashLine));
-    painter->drawLine(QPointF(PLAYFIELD_X, dangerY), QPointF(PLAYFIELD_X + PLAYFIELD_W, dangerY));
+    // (Removed background grid per user request for pure cosmic transparency)
+
+    // 2. Left Wall Glowing Laser Rail (X = PLAYFIELD_X)
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70), 8.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X, SCENE_H);
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 230), 3.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X, SCENE_H);
+    painter->setPen(QPen(QColor(255, 255, 255, 200), 1.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X, SCENE_H);
+
+    // Metric tick-marks
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 180), 1.5));
+    for (int y = 20; y < SCENE_H - 20; y += 25) {
+        painter->drawLine(PLAYFIELD_X, y, PLAYFIELD_X + 6, y);
+    }
+
+    // 3. Right Wall Glowing Laser Rail (X = PLAYFIELD_X + PLAYFIELD_W)
+    qreal rX = PLAYFIELD_X + PLAYFIELD_W;
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70), 8.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(rX, 0, rX, SCENE_H);
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 230), 3.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(rX, 0, rX, SCENE_H);
+    painter->setPen(QPen(QColor(255, 255, 255, 200), 1.0, Qt::SolidLine, Qt::FlatCap));
+    painter->drawLine(rX, 0, rX, SCENE_H);
+
+    for (int y = 20; y < SCENE_H - 20; y += 25) {
+        painter->drawLine(rX - 6, y, rX, y);
+    }
+
+    // 4. Top Boundary Rail
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 200), 2.0));
+    painter->drawLine(PLAYFIELD_X, 2, rX, 2);
+
+    // 5. Corner Cyber-Brackets [ ]
+    painter->setPen(QPen(Qt::white, 2.5));
+    int b = 15;
+    // Top-Left
+    painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X + b, 0);
+    painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X, b);
+    // Top-Right
+    painter->drawLine(rX, 0, rX - b, 0);
+    painter->drawLine(rX, 0, rX, b);
+    // Bottom-Left
+    painter->drawLine(PLAYFIELD_X, SCENE_H, PLAYFIELD_X + b, SCENE_H);
+    painter->drawLine(PLAYFIELD_X, SCENE_H, PLAYFIELD_X, SCENE_H - b);
+    // Bottom-Right
+    painter->drawLine(rX, SCENE_H, rX - b, SCENE_H);
+    painter->drawLine(rX, SCENE_H, rX, SCENE_H - b);
+
+    // 6. Danger Floor Barrier (SCENE_H - 120)
+    qreal dangerY = SCENE_H - 120;
+    if (m_dangerLevel > 0.65) {
+        painter->setPen(QPen(QColor(239, 68, 68, 220), 2.0, Qt::DashLine));
+    } else {
+        painter->setPen(QPen(QColor(239, 68, 68, 120), 1.5, Qt::DashLine));
+    }
+    painter->drawLine(PLAYFIELD_X + 5, dangerY, rX - 5, dangerY);
 }
-
 void GameScene::drawLeftHUD(QPainter* painter) {
-    QRectF profileCard(15, 20, 195, 100);
-    painter->setPen(QPen(QColor(56, 189, 248, 80), 1));
-    painter->setBrush(QColor(15, 23, 42, 180));
-    painter->drawRoundedRect(profileCard, 12, 12);
+    qint64 ms = QTime::currentTime().msecsSinceStartOfDay();
+    qreal t = (ms % 600000) / 1000.0;
 
+    // --- CARD 1: PROFILE, RANK, MISSION TIMER & ECG (Top-Left) ---
+    QRectF profileCard(12, 12, 195, 90);
+    painter->setBrush(QColor(10, 16, 28, 145));
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 80), 1.2));
+    painter->drawRoundedRect(profileCard, 8, 8);
+
+    // Live ECG Line
+    painter->setPen(QPen(m_dangerLevel > 0.7 ? QColor(239, 68, 68) : QColor(16, 185, 129), 1.5));
+    QPainterPath ecgPath;
+    qreal startX = 18;
+    qreal ecgY = 26;
+    ecgPath.moveTo(startX, ecgY);
+    for (int i = 0; i < 180; i += 5) {
+        qreal x = startX + i;
+        qreal modPhase = std::fmod(m_ecgPhase - (i * 0.02), 2.0 * M_PI);
+        qreal yOff = 0;
+        if (modPhase > 0 && modPhase < 1.0) {
+            yOff = -12 * std::sin(modPhase * M_PI);
+        } else if (modPhase > 1.0 && modPhase < 1.5) {
+            yOff = 6 * std::sin((modPhase - 1.0) * M_PI * 2);
+        }
+        ecgPath.lineTo(x, ecgY + yOff);
+    }
+    painter->drawPath(ecgPath);
+
+    // Operative Name
+    painter->setPen(Qt::white);
+    painter->setFont(QFont("Segoe UI", 11, QFont::Black));
+    painter->drawText(QRectF(20, 38, 110, 20), m_username);
+
+    // Dynamic Combat Rank
+    QString rankTitle = "RANK: RECRUIT";
+    QColor rankColor = QColor(148, 163, 184);
+    if (m_score >= 3000) { rankTitle = "RANK: CYBER-ACE"; rankColor = QColor(168, 85, 247); }
+    else if (m_score >= 1500) { rankTitle = "RANK: SHARPSHOOTER"; rankColor = QColor(245, 158, 11); }
+    else if (m_score >= 500) { rankTitle = "RANK: SPECIALIST"; rankColor = ThemeManager::instance().getPrimaryColor(); }
+
+    painter->setPen(rankColor);
+    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+    painter->drawText(QRectF(20, 58, 120, 16), rankTitle);
+
+    // Mission Stopwatch Timer (MM:SS.s)
+    int totalSec = static_cast<int>(m_gameplayTimeSeconds);
+    int mins = totalSec / 60;
+    int secs = totalSec % 60;
+    int frac = static_cast<int>((m_gameplayTimeSeconds - totalSec) * 10);
+    QString timeStr = QString("%1:%2.%3")
+        .arg(mins, 2, 10, QChar('0'))
+        .arg(secs, 2, 10, QChar('0'))
+        .arg(frac);
+
+    painter->setPen(ThemeManager::instance().getPrimaryColor());
+    painter->setFont(QFont("Consolas", 10, QFont::Bold));
+    painter->drawText(QRectF(118, 42, 80, 20), Qt::AlignRight, timeStr);
+
+    // Online Status Beacon
+    painter->setBrush(QColor(16, 185, 129));
+    painter->setPen(Qt::NoPen);
+    painter->drawEllipse(QPointF(142, 70), 3.5, 3.5);
+    painter->setPen(QColor(16, 185, 129));
+    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+    painter->drawText(QRectF(150, 62, 50, 18), "ONLINE");
+
+    // --- CARD 2: TELEMETRY, GAUGES, RADAR (Mid-Left) ---
+    QRectF statsCard(12, 108, 195, 295);
+    QColor statsBorder = (m_comboStreak >= 3) ? QColor(245, 158, 11, 160) : ((m_dangerLevel > 0.7) ? QColor(239, 68, 68, 160) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70));
+    painter->setBrush(QColor(10, 16, 28, 145));
+    painter->setPen(QPen(statsBorder, 1.2));
+    painter->drawRoundedRect(statsCard, 8, 8);
+
+    // 1. Live Rolling Score
+    QString scoreStr = QString("%1").arg(static_cast<int>(m_displayedScore), 6, 10, QChar('0'));
     painter->setPen(QColor(148, 163, 184));
-    painter->setFont(QFont("Segoe UI", 9, QFont::Bold));
-    painter->drawText(profileCard.adjusted(12, 12, -12, 0), "OPERATIVE PROFILE");
+    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+    painter->drawText(QRectF(22, 116, 100, 15), "LIVE SCORE");
+
+    painter->setPen((m_comboStreak >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+    painter->setFont(QFont("Consolas", 18, QFont::Bold));
+    painter->drawText(QRectF(22, 130, 170, 26), scoreStr);
+
+    // 2. Overdrive Segmented LED Bar (5 Notches)
+    painter->setPen(QColor(148, 163, 184));
+    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+    painter->drawText(QRectF(22, 162, 170, 14), QString("OVERDRIVE STREAK (x%1)").arg(m_comboStreak));
+
+    int activeBars = std::min(m_comboStreak, 5);
+    for (int b = 0; b < 5; ++b) {
+        QRectF barRect(22 + b * 34, 178, 30, 8);
+        if (b < activeBars) {
+            QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+            painter->setBrush(barCol);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(barRect, 2, 2);
+        } else {
+            painter->setBrush(QColor(30, 41, 59, 150));
+            painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
+            painter->drawRoundedRect(barRect, 2, 2);
+        }
+    }
+
+    // 3. Radial Target Accuracy Gauge
+    int acc = m_shotsFired > 0 ? (m_shotsHit * 100 / m_shotsFired) : 0;
+    QColor accCol = acc >= 60 ? QColor(16, 185, 129) : (acc >= 35 ? ThemeManager::instance().getPrimaryColor() : QColor(239, 68, 68));
+
+    QRectF arcRect(24, 202, 50, 50);
+    // Background Arc
+    painter->setPen(QPen(QColor(30, 41, 59, 180), 4.5, Qt::SolidLine, Qt::RoundCap));
+    painter->setBrush(Qt::NoBrush);
+    painter->drawArc(arcRect, 225 * 16, -270 * 16);
+    // Active Neon Arc
+    painter->setPen(QPen(accCol, 4.5, Qt::SolidLine, Qt::RoundCap));
+    qreal spanAngle = -(acc / 100.0) * 270.0;
+    painter->drawArc(arcRect, 225 * 16, int(spanAngle * 16));
+
+    // Text inside Arc
+    painter->setPen(accCol);
+    painter->setFont(QFont("Consolas", 10, QFont::Bold));
+    painter->drawText(arcRect, Qt::AlignCenter, QString("%1%").arg(acc));
+
+    // Stats next to Arc
+    painter->setPen(QColor(148, 163, 184));
+    painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+    painter->drawText(QRectF(84, 210, 110, 16), "TARGET ACCURACY");
+    painter->setFont(QFont("Consolas", 9));
+    painter->setPen(Qt::white);
+    painter->drawText(QRectF(84, 228, 110, 18), QString("HITS: %1 / %2").arg(m_shotsHit).arg(m_shotsFired));
+
+    // 4. Tactical Color Spectrum Radar (Breakdown of remaining grid colors)
+    painter->setPen(QColor(148, 163, 184));
+    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+    painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
+
+    auto dist = m_grid.getColorDistribution();
+    int totalBalls = 0;
+    for (const auto& pair : dist) totalBalls += pair.second;
+
+    QRectF spectrumBar(22, 280, 175, 7);
+    painter->setBrush(QColor(15, 23, 42));
+    painter->setPen(QPen(QColor(56, 189, 248, 50), 1));
+    painter->drawRoundedRect(spectrumBar, 2, 2);
+
+    if (totalBalls > 0) {
+        qreal curX = 22;
+        for (const auto& pair : dist) {
+            qreal w = (static_cast<qreal>(pair.second) / totalBalls) * 175.0;
+            if (w > 1.0) {
+                painter->setBrush(Ball::toQColor(pair.first));
+                painter->setPen(Qt::NoPen);
+                painter->drawRect(QRectF(curX, 280, w, 7));
+                curX += w;
+            }
+        }
+    }
+
+    // Trajectory Telemetry
+    painter->setPen(QColor(148, 163, 184));
+    painter->setFont(QFont("Consolas", 7.5));
+    QString telemetry = QString("TRAJ: %1° | BNC: %2 | SECTOR: 01").arg(m_aimAngleTelemetry, 0, 'f', 1).arg(m_aimBouncesTelemetry);
+    painter->drawText(QRectF(22, 305, 175, 18), telemetry);
+
+    // Hazard Alert
+    if (m_dangerLevel > 0.7 && std::fmod(t * 3.0, 1.0) < 0.5) {
+        painter->setPen(QColor(239, 68, 68));
+        painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⚠️ PERIMETER BREACH ⚠️");
+    }
+
+    // --- CARD 3: TACTICAL MENU BUTTON (Bottom-Left) ---
+    QRectF menuBtn(12, 410, 195, 45);
+    bool isHovered = menuBtn.contains(m_mouseHoverPos);
+    painter->setBrush(isHovered ? QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 45) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 25));
+    painter->setPen(QPen(isHovered ? QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 255) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 180), isHovered ? 2.0 : 1.5));
+    QPolygonF btnPoly;
+    btnPoly << QPointF(12, 420) << QPointF(22, 410) << QPointF(197, 410)
+            << QPointF(207, 420) << QPointF(207, 445) << QPointF(197, 455)
+            << QPointF(22, 455) << QPointF(12, 445);
+    painter->drawPolygon(btnPoly);
 
     painter->setPen(Qt::white);
-    painter->setFont(QFont("Segoe UI", 13, QFont::Bold));
-    painter->drawText(profileCard.adjusted(12, 35, -12, 0), m_username);
-
-    painter->setPen(QColor(0, 242, 254));
-    painter->setFont(QFont("Segoe UI", 10));
-    painter->drawText(profileCard.adjusted(12, 65, -12, 0), QString("MODE: %1").arg(m_mode.toUpper()));
-
-    QRectF scoreCard(15, 135, 195, 300);
-    painter->setPen(QPen(QColor(56, 189, 248, 80), 1));
-    painter->setBrush(QColor(15, 23, 42, 180));
-    painter->drawRoundedRect(scoreCard, 12, 12);
-
-    auto drawStat = [&](int yOff, QString label, QString val, QColor valCol) {
-        painter->setPen(QColor(148, 163, 184));
-        painter->setFont(QFont("Segoe UI", 9, QFont::Bold));
-        painter->drawText(QRectF(27, yOff, 170, 20), label);
-
-        painter->setPen(valCol);
-        painter->setFont(QFont("Segoe UI", 16, QFont::Black));
-        painter->drawText(QRectF(27, yOff + 18, 170, 30), val);
-    };
-
-    drawStat(155, "CURRENT SCORE", QString::number(m_score), QColor(0, 242, 254));
-    drawStat(225, "COMBO STREAK", QString("%1x").arg(m_comboStreak), QColor(245, 158, 11));
-
-    int acc = (m_shotsFired > 0) ? (m_shotsHit * 100 / m_shotsFired) : 100;
-    drawStat(295, "HIT ACCURACY", QString("%1%").arg(acc), QColor(16, 185, 129));
-    drawStat(365, "SHOTS FIRED", QString::number(m_shotsFired), QColor(241, 245, 249));
-
-    QRectF hintCard(15, 450, 195, 130);
-    painter->setPen(QPen(QColor(255, 255, 255, 30), 1));
-    painter->setBrush(QColor(15, 23, 42, 120));
-    painter->drawRoundedRect(hintCard, 10, 10);
-
-    painter->setPen(QColor(148, 163, 184));
-    painter->setFont(QFont("Segoe UI", 8, QFont::Bold));
-    painter->drawText(hintCard.adjusted(10, 10, -10, -10),
-                      "COMMAND CONTROLS:\n\n"
-                      "• [R-CLICK] / [SPACE]:\n  Swap Ammo\n"
-                      "• [RIGHT PANEL]:\n  Equip Special Skills\n"
-                      "• [ESC]: Pause Menu");
+    painter->setFont(QFont("Segoe UI", 10.5, QFont::Bold));
+    painter->drawText(menuBtn, Qt::AlignCenter, "[ ≡ TACTICAL MENU ]");
 }
-
 void GameScene::drawRightSkillPanel(QPainter* painter) {
-    painter->setPen(QColor(0, 242, 254));
-    painter->setFont(QFont("Segoe UI", 12, QFont::Black));
-    painter->drawText(QRectF(595, 25, 185, 30), Qt::AlignCenter, "TACTICAL ARSENAL");
+    qint64 ms = QTime::currentTime().msecsSinceStartOfDay();
+    qreal t = (ms % 600000) / 1000.0;
 
-    painter->setPen(QColor(148, 163, 184));
-    painter->setFont(QFont("Segoe UI", 8));
-    painter->drawText(QRectF(595, 50, 185, 40), Qt::AlignCenter, "Click to load skill\ninto cannon");
+    // --- FLOATING HEADER: AUDIO EQUALIZER & TITLE (Top-Right) ---
+    QRectF headerCard(590, 12, 198, 65);
+    painter->setBrush(QColor(10, 16, 28, 145));
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 80), 1.2));
+    painter->drawRoundedRect(headerCard, 8, 8);
 
-    for (const auto& skill : m_skills) {
+    // Audio Visualizer Frequency Wave
+    painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 160), 1.5));
+    for (int i = 0; i < 20; ++i) {
+        qreal h = 4 + (QRandomGenerator::global()->bounded(16)) * (m_comboStreak > 1 ? 1.4 : 1.0);
+        painter->drawLine(600 + i * 8, 40, 600 + i * 8, 40 - h);
+    }
+
+    painter->setPen(ThemeManager::instance().getPrimaryColor());
+    painter->setFont(QFont("Segoe UI", 11, QFont::Black));
+    painter->drawText(QRectF(590, 46, 198, 22), Qt::AlignCenter, "CYBER-ARSENAL");
+
+    // --- 4 FLOATING SKILL CARDS WITH HOVER FX & SHORTCUT BADGES ---
+    for (int i = 0; i < m_skills.size(); ++i) {
+        const auto& skill = m_skills[i];
         bool available = skill.count > 0;
-        QColor cardBorder = available ? skill.color : QColor(71, 85, 105);
-        painter->setPen(QPen(cardBorder, 1.5));
-        painter->setBrush(available ? QColor(15, 23, 42, 200) : QColor(15, 23, 42, 100));
-        painter->drawRoundedRect(skill.rect, 10, 10);
+        bool isHovered = skill.rect.contains(m_mouseHoverPos);
+        QColor cardBorder = available ? (isHovered ? skill.color.lighter(130) : skill.color) : QColor(71, 85, 105);
 
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(available ? skill.color : QColor(71, 85, 105));
-        painter->drawEllipse(skill.rect.left() + 15, skill.rect.top() + 25, 28, 28);
+        // Floating Card Background (Interactive Glow on Hover)
+        painter->setPen(QPen(cardBorder, isHovered ? 2.0 : (available ? 1.4 : 1.0)));
+        QLinearGradient cardGrad(skill.rect.topLeft(), skill.rect.bottomRight());
+        cardGrad.setColorAt(0.0, available ? QColor(cardBorder.red(), cardBorder.green(), cardBorder.blue(), isHovered ? 75 : 45) : QColor(10, 16, 28, 110));
+        cardGrad.setColorAt(1.0, QColor(10, 16, 28, isHovered ? 175 : 140));
+        painter->setBrush(cardGrad);
+        painter->drawRoundedRect(skill.rect, 8, 8);
 
+        // 3D Hexagonal Animated Pod
+        QPointF hexCenter(skill.rect.left() + 30, skill.rect.top() + 32);
+        qreal hexRadius = 22.0;
+
+        if (available) {
+            // Render the special weapon orb inside the pod using our master BallItem engine!
+            BallColor previewSec = (skill.type == BallType::DualColor) ? BallColor::Purple : BallColor::None;
+            BallColor previewMain = (skill.type == BallType::DualColor) ? BallColor::Red : BallColor::None;
+            BallItem::paintBall(painter, hexCenter, 14.0, previewMain, skill.type, previewSec, false);
+        } else {
+            // Depleted Pod
+            QPolygonF hex;
+            for (int h = 0; h < 6; ++h) {
+                qreal a = h * M_PI / 3.0 + (M_PI / 2.0);
+                hex << QPointF(hexCenter.x() + std::cos(a) * hexRadius, hexCenter.y() + std::sin(a) * hexRadius);
+            }
+            painter->setBrush(QColor(15, 20, 30, 140));
+            painter->setPen(QPen(QColor(71, 85, 105), 1, Qt::DashLine));
+            painter->drawPolygon(hex);
+
+            painter->setPen(QColor(239, 68, 68, 150));
+            painter->setFont(QFont("Segoe UI", 6, QFont::Bold));
+            painter->drawText(QRectF(hexCenter.x() - 15, hexCenter.y() - 10, 30, 20), Qt::AlignCenter, "EMPTY");
+        }
+
+        // Title and Description
         painter->setPen(available ? Qt::white : QColor(148, 163, 184));
-        painter->setFont(QFont("Segoe UI", 10, QFont::Bold));
-        painter->drawText(QRectF(skill.rect.left() + 52, skill.rect.top() + 16, 125, 20), skill.title);
+        painter->setFont(QFont("Segoe UI", 9, QFont::Bold));
+        painter->drawText(QRectF(skill.rect.left() + 60, skill.rect.top() + 16, 95, 20), skill.title);
 
-        painter->setPen(QColor(148, 163, 184));
-        painter->setFont(QFont("Segoe UI", 8));
-        painter->drawText(QRectF(skill.rect.left() + 52, skill.rect.top() + 38, 125, 18), skill.desc);
+        painter->setPen(available ? QColor(148, 163, 184) : QColor(71, 85, 105));
+        painter->setFont(QFont("Segoe UI", 7.5));
+        painter->drawText(QRectF(skill.rect.left() + 60, skill.rect.top() + 36, 120, 20), skill.desc);
 
-        QRectF badge(skill.rect.right() - 28, skill.rect.top() + 8, 20, 20);
-        painter->setBrush(available ? QColor(0, 242, 254) : QColor(100, 116, 139));
-        painter->drawRoundedRect(badge, 5, 5);
+        // Keyboard Shortcut Badge [ 1 ] [ 2 ] [ 3 ] [ 4 ]
+        QRectF keyBadge(skill.rect.right() - 48, skill.rect.top() + 8, 18, 16);
+        painter->setBrush(QColor(15, 23, 42, 200));
+        painter->setPen(QPen(available ? QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 180) : QColor(71, 85, 105), 1.0));
+        painter->drawRoundedRect(keyBadge, 3, 3);
+        painter->setPen(available ? ThemeManager::instance().getPrimaryColor() : QColor(148, 163, 184));
+        painter->setFont(QFont("Consolas", 8, QFont::Bold));
+        painter->drawText(keyBadge, Qt::AlignCenter, QString::number(i + 1));
 
-        painter->setPen(Qt::black);
-        painter->setFont(QFont("Segoe UI", 9, QFont::Black));
-        painter->drawText(badge, Qt::AlignCenter, QString::number(skill.count));
+        // Count Badge
+        if (available) {
+            painter->setBrush(cardBorder);
+            painter->setPen(Qt::NoPen);
+            QPolygonF badgePoly;
+            badgePoly << QPointF(skill.rect.right() - 25, skill.rect.top() + 8)
+                      << QPointF(skill.rect.right() - 10, skill.rect.top() + 8)
+                      << QPointF(skill.rect.right() - 5, skill.rect.top() + 16)
+                      << QPointF(skill.rect.right() - 10, skill.rect.top() + 24)
+                      << QPointF(skill.rect.right() - 25, skill.rect.top() + 24)
+                      << QPointF(skill.rect.right() - 30, skill.rect.top() + 16);
+            painter->drawPolygon(badgePoly);
+
+            painter->setPen(Qt::black);
+            painter->setFont(QFont("Segoe UI", 9, QFont::Bold));
+            painter->drawText(QRectF(skill.rect.right() - 30, skill.rect.top() + 8, 25, 16), Qt::AlignCenter, QString::number(skill.count));
+        }
     }
 }
-
 void GameScene::pauseGame() {
     m_isPaused = true;
-    if (m_aimLine) m_aimLine->clearAim();
 }
 
 void GameScene::resumeGame() {

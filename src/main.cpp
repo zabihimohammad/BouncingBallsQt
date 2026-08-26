@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
     defaultFont.setStyleHint(QFont::SansSerif);
     app.setFont(defaultFont);
 
-    app.setStyleSheet(ThemeManager::getMasterStyleSheet());
+    app.setStyleSheet(ThemeManager::instance().getMasterStyleSheet());
 
     runLogicSelfTest();
 

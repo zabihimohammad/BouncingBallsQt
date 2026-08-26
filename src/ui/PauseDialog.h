@@ -4,9 +4,14 @@
 class PauseDialog : public QDialog {
     Q_OBJECT
 public:
-    PauseDialog(QWidget* parent = nullptr);
+    explicit PauseDialog(QWidget* parent = nullptr);
+    ~PauseDialog() = default;
 
 signals:
     void resumeGame();
+    void openSettings();
     void exitToMenu();
+
+protected:
+    void paintEvent(QPaintEvent* event) override;
 };
