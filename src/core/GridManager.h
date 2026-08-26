@@ -9,10 +9,10 @@
 class GridManager {
 public:
     static const int ROWS = 14;
-    static const int COLS_EVEN = 12; // ارتقا از ۸ به ۱۲ ستون
-    static const int COLS_ODD = 11;  // ارتقا از ۷ به ۱۱ ستون
+    static const int COLS_EVEN = 8;
+    static const int COLS_ODD = 7;
     static constexpr qreal BALL_RADIUS = 22.0;
-    static constexpr qreal BALL_DIAMETER = BALL_RADIUS * 2.0; // 44.0 px
+    static constexpr qreal BALL_DIAMETER = BALL_RADIUS * 2.0;
 
     GridManager();
     ~GridManager();

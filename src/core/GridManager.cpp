@@ -89,7 +89,7 @@ void GridManager::loadLevel(int levelNumber) {
         for (int r = 0; r < 5; ++r) {
             int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
             for (int c = 0; c < cols; ++c) {
-                if ((r == 1 && c == 4) || (r == 3 && (c == 2 || c == 7))) {
+                if ((r == 1 && c == 3) || (r == 3 && (c == 2 || c == 5))) {
                     m_grid[r][c] = new Ball(BallColor::Black, BallType::Regular, BallColor::None, r, c);
                 } else {
                     auto* b = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, r, c);
@@ -102,20 +102,20 @@ void GridManager::loadLevel(int levelNumber) {
         for (int r = 0; r < 6; ++r) {
             int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
             for (int c = 0; c < cols; ++c) {
-                if (r == 2 && (c == 2 || c == cols - 3)) {
+                if (r == 2 && (c == 2 || c == cols - 2)) {
                     m_grid[r][c] = new Ball(BallColor::Black, BallType::Regular, BallColor::None, r, c);
                 } else {
                     auto* b = new Ball(getStandardColor(r * 2 + c), BallType::Regular, BallColor::None, r, c);
-                    if (r == 0 && (c == 3 || c == 8)) b->setLocked(true);
+                    if (r == 0 && (c == 2 || c == 5)) b->setLocked(true);
                     if (r == 4) b->setFreezeLevel(2);
                     if (r == 5) b->setMystery(true);
                     m_grid[r][c] = b;
                 }
             }
         }
-        if (m_grid[3][5]) {
-            m_grid[3][5]->setKey(true);
-            m_grid[3][5]->setPrimaryColor(BallColor::Yellow);
+        if (m_grid[3][3]) {
+            m_grid[3][3]->setKey(true);
+            m_grid[3][3]->setPrimaryColor(BallColor::Yellow);
         }
     }
 }
