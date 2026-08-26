@@ -54,7 +54,7 @@ PauseDialog::PauseDialog(QWidget* parent) : QDialog(parent) {
         accept();
     });
     connect(btnRestart, &QPushButton::clicked, this, [this]() {
-        emit exitToMenu();
+        emit restartGame();
         accept();
     });
     connect(btnSettings, &QPushButton::clicked, this, [this]() {

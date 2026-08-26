@@ -229,14 +229,14 @@ void GameView::drawBackground(QPainter* painter, const QRectF&) {
             if (d > 0.80) {
                 col = QColor(255, int(210 + (d-0.8)*225), int(110 + (d-0.8)*725), alpha);
             } else if (d > 0.55) {
-                int hue = int(themeBaseHue + 25 + hueDrift * 30) % 360;
+                int hue = ((int(themeBaseHue + 25 + hueDrift * 30) % 360) + 360) % 360;
                 col = QColor::fromHsv(hue, 200, 220, alpha);
             } else if (d > 0.25) {
-                int hue = int(themeBaseHue + hueDrift * 25) % 360;
+                int hue = ((int(themeBaseHue + hueDrift * 25) % 360) + 360) % 360;
                 col = QColor::fromHsv(hue, 180, 170, alpha);
             } else {
                 int nearAlpha = int(alpha * (0.4 + d * 2.4));
-                int hue = int(themeBaseHue - 10 + hueDrift * 20) % 360;
+                int hue = ((int(themeBaseHue - 10 + hueDrift * 20) % 360) + 360) % 360;
                 col = QColor::fromHsv(hue, 160, 150, std::min(255, nearAlpha));
             }
 
@@ -280,9 +280,9 @@ void GameView::drawBackground(QPainter* painter, const QRectF&) {
             if (d1 < 0.05) alpha = int(alpha * (d1 / 0.05));
             if (alpha < 10) continue;
 
-            int hue = int(themeBaseHue + hueDrift*72 + (i % 5)*20) % 360;
+            int hue = ((int(themeBaseHue + hueDrift*72 + (i % 5)*20) % 360) + 360) % 360;
             QColor col = QColor::fromHsv(hue, 210, 240, alpha);
-            if (i % 7 == 0) col = ThemeManager::instance().getSecondaryColor(); col.setAlpha(alpha);
+            if (i % 7 == 0) { col = ThemeManager::instance().getSecondaryColor(); col.setAlpha(alpha); }
 
             qreal w = 0.5 + (1.0 - d0) * 2.2;
             QPointF p0(C.x() + std::cos(angle)*r0, C.y() + std::sin(angle)*r0);
@@ -307,7 +307,8 @@ void GameView::drawBackground(QPainter* painter, const QRectF&) {
         painter->setPen(Qt::NoPen);
         for (auto& l : layers) {
             qreal lr = diagR * l.r * breath;
-            QColor lc = QColor::fromHsv((themeBaseHue + l.hOffset + 360) % 360, l.s, l.v, int(l.a * breath));
+            int lHue = ((themeBaseHue + l.hOffset) % 360 + 360) % 360;
+            QColor lc = QColor::fromHsv(lHue, l.s, l.v, int(l.a * breath));
             QRadialGradient g(C, lr);
             g.setColorAt(0.0, lc);
             g.setColorAt(1.0, Qt::transparent);

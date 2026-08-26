@@ -9,6 +9,7 @@ public:
 
 signals:
     void resumeGame();
+    void restartGame();
     void openSettings();
     void exitToMenu();
 

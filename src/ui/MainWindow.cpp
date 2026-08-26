@@ -105,6 +105,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 }
 
 void MainWindow::startNewGame(const QString& username, const QString& mode) {
+    if (m_gameView) {
+        auto* oldView = m_gameView;
+        m_stackedWidget->removeWidget(oldView);
+        oldView->deleteLater();
+        m_gameView = nullptr;
+        m_gameScene = nullptr;
+    }
+
     m_currentUser = username;
     m_currentMode = mode;
 
@@ -112,9 +120,9 @@ void MainWindow::startNewGame(const QString& username, const QString& mode) {
     m_gameView = new GameView(this);
     m_gameView->setScene(m_gameScene);
 
-    connect(m_gameScene, &GameScene::gameOver, this, &MainWindow::handleGameOver);
-    connect(m_gameScene, &GameScene::gameWon, this, &MainWindow::handleGameWon);
-    connect(m_gameScene, &GameScene::pauseRequested, this, &MainWindow::showPauseMenu);
+    connect(m_gameScene, &GameScene::gameOver, this, &MainWindow::handleGameOver, Qt::QueuedConnection);
+    connect(m_gameScene, &GameScene::gameWon, this, &MainWindow::handleGameWon, Qt::QueuedConnection);
+    connect(m_gameScene, &GameScene::pauseRequested, this, &MainWindow::showPauseMenu, Qt::QueuedConnection);
     connect(m_gameScene, &GameScene::shakeRequested, m_gameView, &GameView::triggerShake);
 
     m_stackedWidget->addWidget(m_gameView);
@@ -124,13 +132,18 @@ void MainWindow::startNewGame(const QString& username, const QString& mode) {
 void MainWindow::handleGameOver(int score) {
     m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
     auto dlg = new GameOverDialog(false, m_currentUser, score, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
+    connect(dlg, &GameOverDialog::restartGame, this, [this]() {
+        startNewGame(m_currentUser, m_currentMode);
+    });
     dlg->exec();
 }
 
 void MainWindow::handleGameWon(int score) {
     m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
     auto dlg = new GameOverDialog(true, m_currentUser, score, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
     connect(dlg, &GameOverDialog::restartGame, this, [this]() {
         startNewGame(m_currentUser, m_currentMode);
@@ -139,12 +152,18 @@ void MainWindow::handleGameWon(int score) {
 }
 
 void MainWindow::showPauseMenu() {
+    if (!m_gameScene) return;
     m_gameScene->pauseGame();
     auto dlg = new PauseDialog(this);
-    connect(dlg, &PauseDialog::resumeGame, this, [this]() { m_gameScene->resumeGame(); });
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &PauseDialog::resumeGame, this, [this]() { 
+        if (m_gameScene) m_gameScene->resumeGame(); 
+    });
+    connect(dlg, &PauseDialog::restartGame, this, [this]() {
+        startNewGame(m_currentUser, m_currentMode);
+    });
     connect(dlg, &PauseDialog::exitToMenu, this, &MainWindow::returnToMainMenu);
     connect(dlg, &PauseDialog::openSettings, this, [this, dlg]() {
-        dlg->accept(); // Close dialog
         m_stackedWidget->setCurrentWidget(m_settingsWidget);
     });
     dlg->exec();
@@ -153,8 +172,9 @@ void MainWindow::showPauseMenu() {
 void MainWindow::returnToMainMenu() {
     m_stackedWidget->setCurrentIndex(0);
     if (m_gameView) {
-        m_stackedWidget->removeWidget(m_gameView);
-        delete m_gameView;
+        auto* oldView = m_gameView;
+        m_stackedWidget->removeWidget(oldView);
+        oldView->deleteLater();
         m_gameView = nullptr;
         m_gameScene = nullptr;
     }
