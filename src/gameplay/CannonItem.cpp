@@ -1,5 +1,6 @@
 #include "CannonItem.h"
 #include "BallItem.h"
+#include "../ui/ThemeManager.h"
 #include <QRadialGradient>
 #include <cmath>
 
@@ -39,7 +40,6 @@ void CannonItem::swapBalls() {
 }
 
 void CannonItem::drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type, BallColor secColor) {
-    // Delegate directly to the master BallItem::paintBall engine for 100% unified aesthetics!
     BallItem::paintBall(painter, center, radius, color, type, secColor, false);
 }
 
@@ -59,24 +59,26 @@ void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     Q_UNUSED(widget);
     painter->setRenderHint(QPainter::Antialiasing);
 
-    // 1. Easing for recoil and muzzle flash
     m_recoilOffset *= 0.82;
     if (m_recoilOffset < 0.2) m_recoilOffset = 0.0;
-
     m_muzzleFlashAlpha *= 0.78;
     if (m_muzzleFlashAlpha < 0.03) m_muzzleFlashAlpha = 0.0;
 
-    // 2. Sci-Fi Mechanical Cannon Base
     QRadialGradient baseGlow(0, 0, 48);
-    baseGlow.setColorAt(0.0, QColor(10, 15, 30));
-    baseGlow.setColorAt(0.75, QColor(15, 23, 42));
-    baseGlow.setColorAt(1.0, QColor(0, 242, 254, 180));
-
+    if (m_isOverdrive) {
+        baseGlow.setColorAt(0.0, QColor(60, 10, 0));
+        baseGlow.setColorAt(0.75, QColor(255, 60, 0, 160));
+        baseGlow.setColorAt(1.0, QColor(255, 204, 0, 180));
+        painter->setPen(QPen(QColor(255, 204, 0), 2.5));
+    } else {
+        baseGlow.setColorAt(0.0, QColor(10, 15, 30));
+        baseGlow.setColorAt(0.75, QColor(15, 23, 42));
+        baseGlow.setColorAt(1.0, QColor(0, 242, 254, 180));
+        painter->setPen(QPen(QColor(0, 242, 254), 2));
+    }
     painter->setBrush(baseGlow);
-    painter->setPen(QPen(QColor(0, 242, 254), 2));
     painter->drawEllipse(QPointF(0, 0), 42, 42);
 
-    // Mechanical gear teeth around base
     painter->setPen(QPen(QColor(148, 163, 184, 160), 2.5));
     painter->save();
     for (int i = 0; i < 8; ++i) {
@@ -85,53 +87,55 @@ void CannonItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option
     }
     painter->restore();
 
-    // 3. Railgun Barrel
     painter->save();
     painter->rotate(-m_angle + 90.0);
     painter->translate(0, m_recoilOffset);
 
-    // Side rails
     painter->setBrush(QBrush(QColor(30, 41, 59)));
     painter->setPen(QPen(QColor(148, 163, 184), 2));
     painter->drawRoundedRect(-18, -48, 10, 48, 3, 3);
     painter->drawRoundedRect(8, -48, 10, 48, 3, 3);
 
-    // Center Plasma track
     QLinearGradient plasmaTrack(0, 0, 0, -50);
-    plasmaTrack.setColorAt(0.0, QColor(0, 242, 254, 100));
-    plasmaTrack.setColorAt(1.0, QColor(0, 242, 254, 250));
+    if (m_isOverdrive) {
+        plasmaTrack.setColorAt(0.0, QColor(255, 60, 0, 120));
+        plasmaTrack.setColorAt(1.0, QColor(255, 204, 0, 250));
+    } else {
+        plasmaTrack.setColorAt(0.0, QColor(0, 242, 254, 100));
+        plasmaTrack.setColorAt(1.0, QColor(0, 242, 254, 250));
+    }
     painter->setBrush(plasmaTrack);
     painter->setPen(Qt::NoPen);
     painter->drawRect(-6, -45, 12, 35);
 
-    // Reinforcement crossbars
     painter->setBrush(Qt::NoBrush);
     painter->setPen(QPen(QColor(255, 255, 255, 150), 2));
     painter->drawLine(-15, -20, 15, -20);
     painter->drawLine(-15, -35, 15, -35);
 
-    // 4. Muzzle Flash
     if (m_muzzleFlashAlpha > 0.01) {
         QRadialGradient flashGrad(0, -60, 26);
-        flashGrad.setColorAt(0.0, QColor(255, 255, 255, int(m_muzzleFlashAlpha * 255)));
-        flashGrad.setColorAt(0.5, QColor(0, 242, 254, int(m_muzzleFlashAlpha * 200)));
-        flashGrad.setColorAt(1.0, Qt::transparent);
-
+        if (m_isOverdrive) {
+            flashGrad.setColorAt(0.0, QColor(255, 255, 255, int(m_muzzleFlashAlpha * 255)));
+            flashGrad.setColorAt(0.5, QColor(255, 204, 0, int(m_muzzleFlashAlpha * 200)));
+            flashGrad.setColorAt(1.0, Qt::transparent);
+        } else {
+            flashGrad.setColorAt(0.0, QColor(255, 255, 255, int(m_muzzleFlashAlpha * 255)));
+            flashGrad.setColorAt(0.5, QColor(0, 242, 254, int(m_muzzleFlashAlpha * 200)));
+            flashGrad.setColorAt(1.0, Qt::transparent);
+        }
         painter->setBrush(flashGrad);
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(0, -60), 26, 26);
     }
     painter->restore();
 
-    // 5. Active Cannon Ball (Loaded in Chamber) - exact size as grid balls
     drawBall(painter, QPointF(0, 0), 16.0, m_currentColor, m_currentType, m_currentSecColor);
 
-    // 6. Next Ball in Queue (Chamber Magazine Pod)
     painter->setPen(QPen(QColor(0, 242, 254, 140), 1.5, Qt::DashLine));
     painter->setBrush(QColor(10, 16, 28, 180));
     painter->drawEllipse(QPointF(-60, 0), 17, 17);
 
-    // Next Ball text label
     painter->setPen(QColor(148, 163, 184));
     painter->setFont(QFont("Segoe UI", 6, QFont::Bold));
     painter->drawText(QRectF(-80, 18, 40, 14), Qt::AlignCenter, "NEXT");

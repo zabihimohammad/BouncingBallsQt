@@ -27,6 +27,7 @@ public:
     void swapBalls();
     bool isNextBallClicked(const QPointF& localPos) const;
     void triggerFireRecoil();
+    void setOverdrive(bool active) { m_isOverdrive = active; update(); }
 
 private:
     qreal m_sceneWidth;
@@ -43,6 +44,7 @@ private:
 
     qreal m_recoilOffset = 0.0;
     qreal m_muzzleFlashAlpha = 0.0;
+    bool m_isOverdrive = false;
 
     void drawBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type, BallColor secColor = BallColor::None);
 };

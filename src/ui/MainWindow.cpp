@@ -129,7 +129,7 @@ void MainWindow::startNewGame(const QString& username, const QString& mode, int 
 
 void MainWindow::handleGameOver(int score) {
     m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
-    auto dlg = new GameOverDialog(false, m_currentUser, score, this);
+    auto dlg = new GameOverDialog(false, m_currentUser, score, m_currentMode, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
     connect(dlg, &GameOverDialog::restartGame, this, [this]() {
@@ -140,7 +140,7 @@ void MainWindow::handleGameOver(int score) {
 
 void MainWindow::handleGameWon(int score) {
     m_scoreManager.saveScore(m_currentUser, m_currentMode, score);
-    auto dlg = new GameOverDialog(true, m_currentUser, score, this);
+    auto dlg = new GameOverDialog(true, m_currentUser, score, m_currentMode, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     connect(dlg, &GameOverDialog::returnToMenu, this, &MainWindow::returnToMainMenu);
     connect(dlg, &GameOverDialog::restartGame, this, [this]() {

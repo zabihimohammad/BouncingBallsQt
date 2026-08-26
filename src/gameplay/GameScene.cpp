@@ -26,7 +26,20 @@ GameScene::~GameScene() {
 
 void GameScene::initGame() {
     initSkills();
-    if (m_mode == "Random" || m_mode == "Endless" || m_mode == "CHAOS" || m_mode == "ENDLESS") {
+
+    m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.compare("Time", Qt::CaseInsensitive) == 0);
+    m_isEndless = (m_mode.compare("ENDLESS", Qt::CaseInsensitive) == 0);
+
+    m_timeRemaining = 75.0;
+    m_currentWave = 1;
+    m_waveTimer = 0.0;
+    m_currentDropInterval = 14.0;
+    m_maxMissedShots = 4;
+    m_missedShotsCount = 0;
+    m_endlessRowTimer = 0.0;
+    m_dangerTelegraph = false;
+
+    if (m_isEndless || m_mode.compare("Random", Qt::CaseInsensitive) == 0 || m_mode.compare("CHAOS", Qt::CaseInsensitive) == 0) {
         m_grid.generateRandomLevel();
     } else {
         m_grid.loadLevel(m_levelNumber);
@@ -68,6 +81,25 @@ void GameScene::initSkills() {
     m_skills.append({BallType::DualColor, "DUAL ORB", "Splits Two Colors", QColor(165, 94, 234), 3, QRectF(595, 425, 185, 80)});
 }
 
+void GameScene::addSkillAmmo(BallType skillType, int amount) {
+    for (auto& s : m_skills) {
+        if (s.type == skillType) {
+            s.count += amount;
+            SoundManager::instance().playWin();
+            spawnFloatingText(s.rect.center(), QString("+%1 %2").arg(amount).arg(s.title), s.color);
+            update();
+            break;
+        }
+    }
+}
+
+void GameScene::grantRandomSupplyDrop() {
+    int r = QRandomGenerator::global()->bounded(3);
+    if (r == 0) addSkillAmmo(BallType::Bomb);
+    else if (r == 1) addSkillAmmo(BallType::Laser);
+    else addSkillAmmo(BallType::Rainbow);
+}
+
 void GameScene::prepareNextCannonBall() {
     auto availableColors = m_grid.getRemainingColors();
     BallColor chosenColor = BallColor::Red;
@@ -105,7 +137,6 @@ void GameScene::armSkill(int index) {
     if (index < 0 || index >= m_skills.size()) return;
     if (m_isPaused || m_isFlying) return;
 
-    // ۱. اگر همین مهارت مسلح بود، با کلیک مجدد لغو شود
     if (m_armedSkillIndex == index) {
         disarmSkill();
         SoundManager::instance().playPop();
@@ -113,10 +144,8 @@ void GameScene::armSkill(int index) {
         return;
     }
 
-    // ۲. بررسی موجودی کافی
     if (m_skills[index].count <= 0) return;
 
-    // ۳. ذخیره رنگ عادی قبل از لود مهارت
     if (m_armedSkillIndex == -1) {
         m_savedBaseColor = m_cannon->getCurrentColor();
     }
@@ -160,6 +189,48 @@ void GameScene::disarmSkill() {
         m_cannon->setCurrentBall(restoreCol, BallType::Regular);
         m_armedSkillIndex = -1;
         m_savedBaseColor = BallColor::None;
+    }
+}
+
+void GameScene::addTimeBonus(qreal seconds, const QString& reason) {
+    if (!m_isTimeAttack) return;
+    m_timeRemaining += seconds;
+    QPointF hudPos(PLAYFIELD_X + (PLAYFIELD_W / 2.0), 60.0);
+    spawnFloatingText(hudPos, QString("+%1s %2").arg(static_cast<int>(seconds)).arg(reason), QColor(255, 204, 0));
+}
+
+void GameScene::triggerWaveEscalation() {
+    m_currentWave++;
+    m_currentDropInterval = std::max(6.0, 14.0 - (m_currentWave - 1) * 1.5);
+    m_maxMissedShots = std::max(2, 4 - (m_currentWave / 3));
+    m_waveTimer = 0.0;
+
+    emit shakeRequested(16);
+    SoundManager::instance().playShoot();
+    spawnFloatingText(QPointF(PLAYFIELD_X + (PLAYFIELD_W / 2.0), 160),
+                      QString("⚡ WAVE 0%1: HAZARDS DEPLOYED! ⚡").arg(m_currentWave),
+                      QColor(255, 51, 102));
+}
+
+void GameScene::advanceEndlessRow() {
+    m_grid.addRowFromTop(m_currentWave);
+    m_missedShotsCount = 0;
+    m_endlessRowTimer = 0.0;
+    m_dangerTelegraph = false;
+
+    redrawGrid();
+    syncCannonColorsWithGrid();
+    if (m_aimLine && m_cannon) {
+        m_aimLine->updateAim(m_cannon->pos(), m_cannon->getAngle());
+    }
+
+    emit shakeRequested(12);
+    SoundManager::instance().playBounce();
+    spawnFloatingText(QPointF(PLAYFIELD_X + (PLAYFIELD_W / 2.0), 75), "⚠️ ROW ADVANCED!", QColor(239, 68, 68));
+
+    if (m_grid.isBottomReached()) {
+        SoundManager::instance().playGameOver();
+        emit gameOver(m_score);
     }
 }
 
@@ -291,7 +362,6 @@ void GameScene::fireBall() {
     m_flyingSecondaryColor = m_cannon->getCurrentSecondaryColor();
     m_flyingPos = m_cannon->pos();
 
-    // کسر مهمات مهارت تنها در لحظه خروج تیر
     if (m_armedSkillIndex != -1) {
         if (m_skills[m_armedSkillIndex].count > 0) {
             m_skills[m_armedSkillIndex].count--;
@@ -321,6 +391,33 @@ void GameScene::updateGameLoop() {
     m_gameplayTimeSeconds += 0.016;
     m_displayedScore += (m_score - m_displayedScore) * 0.15;
     if (std::abs(m_score - m_displayedScore) < 0.5) m_displayedScore = m_score;
+
+    // ۱. تایمر Time Attack
+    if (m_isTimeAttack) {
+        m_timeRemaining -= 0.016;
+        if (m_timeRemaining <= 0.0) {
+            m_timeRemaining = 0.0;
+            m_isPaused = true;
+            SoundManager::instance().playWin();
+            emit gameWon(m_score);
+            return;
+        }
+    }
+
+    // ۲. سیستم امواج تصاعدی Endless
+    if (m_isEndless) {
+        m_waveTimer += 0.016;
+        if (m_waveTimer >= 45.0) {
+            triggerWaveEscalation();
+        }
+
+        m_endlessRowTimer += 0.016;
+        m_dangerTelegraph = (m_endlessRowTimer >= (m_currentDropInterval - 3.0) || m_missedShotsCount >= (m_maxMissedShots - 1));
+
+        if (m_endlessRowTimer >= m_currentDropInterval) {
+            advanceEndlessRow();
+        }
+    }
 
     int lowestRow = 0;
     for (int r = GridManager::ROWS - 1; r >= 0; --r) {
@@ -458,13 +555,20 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
         m_grid.setBall(r, c, newBall);
 
         QPointF worldCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
+        bool hitSuccessful = false;
 
-        // ۱. اثر بمب (انفجار شعاعی ۳x۳)
+        // ۱. اثر بمب
         if (type == BallType::Bomb) {
             auto exploded = m_grid.explodeBomb(r, c);
             for (const auto& p : exploded) {
                 QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
                 spawnPopParticles(pCenter, QColor(231, 76, 60), 20);
+
+                Ball* b = m_grid.getBall(p.first, p.second);
+                if (b && b->hasContainedSkill()) {
+                    addSkillAmmo(b->getContainedSkill());
+                }
+
                 m_grid.removeBall(p.first, p.second);
                 m_score += 30;
             }
@@ -474,9 +578,11 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
+            addTimeBonus(3.0, "BOOM!");
             m_grid.damageNeighbors(r, c, true);
+            hitSuccessful = true;
         }
-            // ۲. اثر لیزر (پاکسازی سطر هدف)
+            // ۲. اثر لیزر
         else if (type == BallType::Laser) {
             int targetRow = r - 1;
             if (targetRow >= 0) {
@@ -486,6 +592,12 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                     if (m_grid.isOccupied(targetRow, colIdx)) {
                         QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(targetRow, colIdx);
                         spawnPopParticles(pCenter, ThemeManager::instance().getPrimaryColor(), 16);
+
+                        Ball* b = m_grid.getBall(targetRow, colIdx);
+                        if (b && b->hasContainedSkill()) {
+                            addSkillAmmo(b->getContainedSkill());
+                        }
+
                         m_grid.removeBall(targetRow, colIdx);
                         m_score += 25;
                     }
@@ -497,8 +609,10 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
+            addTimeBonus(3.0, "LASER!");
+            hitSuccessful = true;
         }
-            // ۳. اثر رنگین‌کمان (آبشار وایلدکارد)
+            // ۳. اثر رنگین‌کمان
         else if (type == BallType::Rainbow) {
             std::set<BallColor> touchedColors;
             for (const auto& nb : m_grid.getNeighbors(r, c)) {
@@ -525,6 +639,12 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 if (m_grid.isOccupied(p.first, p.second)) {
                     QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
                     spawnPopParticles(pCenter, QColor(255, 204, 0), 16);
+
+                    Ball* b = m_grid.getBall(p.first, p.second);
+                    if (b && b->hasContainedSkill()) {
+                        addSkillAmmo(b->getContainedSkill());
+                    }
+
                     m_grid.removeBall(p.first, p.second);
                     count++;
                 }
@@ -537,12 +657,25 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
+            addTimeBonus(4.0, "CASCADE!");
+            m_grid.damageNeighbors(r, c, isKeyBall);
+            hitSuccessful = true;
+        }
+            // ۴. تطبیق ۳تایی استاندارد یا دو رنگ
+        else {
+            hitSuccessful = popMatches(r, c, color, type, m_flyingSecondaryColor);
             m_grid.damageNeighbors(r, c, isKeyBall);
         }
-            // ۴. تطبیق ۳تایی استاندارد یا توپ دورنگ
-        else {
-            popMatches(r, c, color, type, m_flyingSecondaryColor);
-            m_grid.damageNeighbors(r, c, isKeyBall);
+
+        if (m_isEndless) {
+            if (!hitSuccessful) {
+                m_missedShotsCount++;
+                if (m_missedShotsCount >= m_maxMissedShots) {
+                    advanceEndlessRow();
+                }
+            } else {
+                m_missedShotsCount = 0;
+            }
         }
 
         checkFloatingBalls();
@@ -557,13 +690,35 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playGameOver();
             emit gameOver(m_score);
         } else if (m_grid.isCleared()) {
-            SoundManager::instance().playWin();
-            emit gameWon(m_score);
+            if (m_isEndless) {
+                m_score += 500;
+                emit scoreChanged(m_score);
+                SoundManager::instance().playWin();
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300), "★ BOARD PURGED! +500 PTS ★", QColor(0, 242, 254));
+
+                m_currentWave++;
+                m_currentDropInterval = std::max(6.0, 14.0 - (m_currentWave - 1) * 1.5);
+                m_maxMissedShots = std::max(2, 4 - (m_currentWave / 3));
+                m_endlessRowTimer = 0.0;
+                m_missedShotsCount = 0;
+
+                m_grid.generateRandomLevel();
+                redrawGrid();
+                syncCannonColorsWithGrid();
+
+                emit shakeRequested(15);
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 180),
+                                  QString("⚡ WAVE 0%1 INITIATED ⚡").arg(m_currentWave),
+                                  QColor(255, 204, 0));
+            } else {
+                SoundManager::instance().playWin();
+                emit gameWon(m_score);
+            }
         }
     }
 }
 
-void GameScene::popMatches(int r, int c, BallColor color, BallType type, BallColor secColor) {
+bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallColor secColor) {
     auto matches = m_grid.findMatches(r, c, color, type, secColor);
     if (!matches.empty()) {
         SoundManager::instance().playPop();
@@ -575,6 +730,12 @@ void GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
         for (const auto& p : matches) {
             QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
             spawnPopParticles(pCenter, Ball::toQColor(m_grid.getBall(p.first, p.second)->getPrimaryColor()), 14);
+
+            Ball* b = m_grid.getBall(p.first, p.second);
+            if (b && b->hasContainedSkill()) {
+                addSkillAmmo(b->getContainedSkill());
+            }
+
             m_grid.removeBall(p.first, p.second);
             int pts = 20 + comboBonus;
             m_score += pts;
@@ -590,10 +751,15 @@ void GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
         QString scoreStr = QString("+%1").arg(totalGained);
         if (m_comboStreak > 1) {
             scoreStr += QString(" (x%1 COMBO!)").arg(m_comboStreak);
+            addTimeBonus(2.0 * m_comboStreak, "COMBO!");
+        } else {
+            addTimeBonus(2.0, "MATCH!");
         }
         spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+        return true;
     } else {
         m_comboStreak = 0;
+        return false;
     }
 }
 
@@ -601,15 +767,32 @@ void GameScene::checkFloatingBalls() {
     auto floating = m_grid.findFloatingBalls();
     if (!floating.empty()) {
         int dropScore = 0;
+        int floatCount = floating.size();
+
         for (const auto& p : floating) {
             QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
             spawnPopParticles(pCenter, QColor(148, 163, 184), 16);
+
+            Ball* b = m_grid.getBall(p.first, p.second);
+            if (b && b->hasContainedSkill()) {
+                addSkillAmmo(b->getContainedSkill());
+            }
+
             m_grid.removeBall(p.first, p.second);
             m_score += 50;
             dropScore += 50;
         }
+
+        addTimeBonus(3.0, "FALL BONUS!");
         spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300),
                           QString("+%1 FALL BONUS!").arg(dropScore), QColor(16, 185, 129));
+
+        // پاداش پرتاب خوشه‌های بزرگ (بیش از ۵ گوی معلق)
+        if (floatCount >= 5) {
+            grantRandomSupplyDrop();
+            spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 260),
+                              "★ SUPPLY AIRDROP REWARDED! ★", QColor(255, 204, 0));
+        }
     }
 }
 
@@ -635,6 +818,17 @@ void GameScene::redrawGrid() {
                 addItem(ballItem);
                 ballItem->setZValue(1);
                 ballItem->setData(0, "grid_ball");
+
+                // رسم نشانگر محموله مهمات روی گوی (Supply Drop Badge)
+                if (b->hasContainedSkill()) {
+                    QString icon = (b->getContainedSkill() == BallType::Bomb) ? "💣" :
+                                   ((b->getContainedSkill() == BallType::Laser) ? "⚡" : "🌈");
+                    auto* txt = addText(icon, QFont("Segoe UI Emoji", 10, QFont::Bold));
+                    txt->setDefaultTextColor(Qt::white);
+                    txt->setPos(drawX + 11, drawY + 8);
+                    txt->setZValue(2);
+                    txt->setData(0, "grid_ball");
+                }
             }
         }
     }
@@ -723,6 +917,13 @@ void GameScene::drawPlayfieldFrame(QPainter* painter) {
     painter->setPen(Qt::NoPen);
     painter->drawRect(playfieldRect);
 
+    if (m_isEndless && m_dangerTelegraph) {
+        int pulseAlpha = int(70 + 60 * std::sin(m_gameplayTimeSeconds * 12.0));
+        painter->setBrush(QColor(239, 68, 68, pulseAlpha));
+        painter->setPen(QPen(QColor(239, 68, 68, 200), 2.0, Qt::DashLine));
+        painter->drawRect(QRectF(PLAYFIELD_X, 0, PLAYFIELD_W, GridManager::BALL_DIAMETER));
+    }
+
     painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70), 8.0, Qt::SolidLine, Qt::FlatCap));
     painter->drawLine(PLAYFIELD_X, 0, PLAYFIELD_X, SCENE_H);
     painter->setPen(QPen(QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 230), 3.0, Qt::SolidLine, Qt::FlatCap));
@@ -801,25 +1002,36 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Segoe UI", 11, QFont::Black));
     painter->drawText(QRectF(20, 38, 110, 20), m_username);
 
-    QString rankTitle = "RANK: RECRUIT";
-    QColor rankColor = QColor(148, 163, 184);
-    if (m_score >= 3000) { rankTitle = "RANK: CYBER-ACE"; rankColor = QColor(168, 85, 247); }
-    else if (m_score >= 1500) { rankTitle = "RANK: SHARPSHOOTER"; rankColor = QColor(245, 158, 11); }
-    else if (m_score >= 500) { rankTitle = "RANK: SPECIALIST"; rankColor = ThemeManager::instance().getPrimaryColor(); }
-
-    painter->setPen(rankColor);
+    QString modeTitle = m_isEndless ? QString("WAVE 0%1 [ENDLESS]").arg(m_currentWave) : QString("MODE: %1").arg(m_mode.toUpper());
+    painter->setPen(m_isEndless ? QColor(255, 204, 0) : ThemeManager::instance().getPrimaryColor());
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-    painter->drawText(QRectF(20, 58, 120, 16), rankTitle);
+    painter->drawText(QRectF(20, 58, 120, 16), modeTitle);
 
-    int totalSec = static_cast<int>(m_gameplayTimeSeconds);
-    int mins = totalSec / 60;
-    int secs = totalSec % 60;
-    int frac = static_cast<int>((m_gameplayTimeSeconds - totalSec) * 10);
-    QString timeStr = QString("%1:%2.%3").arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0')).arg(frac);
+    if (m_isTimeAttack) {
+        int totalSec = static_cast<int>(m_timeRemaining);
+        int mins = totalSec / 60;
+        int secs = totalSec % 60;
+        int frac = static_cast<int>((m_timeRemaining - totalSec) * 10);
+        QString timeStr = QString("%1:%2.%3").arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0')).arg(frac);
 
-    painter->setPen(ThemeManager::instance().getPrimaryColor());
-    painter->setFont(QFont("Consolas", 10, QFont::Bold));
-    painter->drawText(QRectF(118, 42, 80, 20), Qt::AlignRight, timeStr);
+        QColor timerCol = (m_timeRemaining <= 10.0) ?
+                          ((std::fmod(t * 5.0, 1.0) < 0.5) ? QColor(239, 68, 68) : QColor(255, 255, 255)) :
+                          QColor(245, 158, 11);
+
+        painter->setPen(timerCol);
+        painter->setFont(QFont("Consolas", 10, QFont::Bold));
+        painter->drawText(QRectF(118, 42, 80, 20), Qt::AlignRight, timeStr);
+    } else {
+        int totalSec = static_cast<int>(m_gameplayTimeSeconds);
+        int mins = totalSec / 60;
+        int secs = totalSec % 60;
+        int frac = static_cast<int>((m_gameplayTimeSeconds - totalSec) * 10);
+        QString timeStr = QString("%1:%2.%3").arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0')).arg(frac);
+
+        painter->setPen(ThemeManager::instance().getPrimaryColor());
+        painter->setFont(QFont("Consolas", 10, QFont::Bold));
+        painter->drawText(QRectF(118, 42, 80, 20), Qt::AlignRight, timeStr);
+    }
 
     painter->setBrush(QColor(16, 185, 129));
     painter->setPen(Qt::NoPen);
@@ -843,22 +1055,43 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Consolas", 18, QFont::Bold));
     painter->drawText(QRectF(22, 130, 170, 26), scoreStr);
 
-    painter->setPen(QColor(148, 163, 184));
-    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-    painter->drawText(QRectF(22, 162, 170, 14), QString("OVERDRIVE STREAK (x%1)").arg(m_comboStreak));
+    if (m_isEndless) {
+        painter->setPen(QColor(148, 163, 184));
+        painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+        painter->drawText(QRectF(22, 162, 170, 14), QString("MISS TOLERANCE: %1/%2").arg(m_missedShotsCount).arg(m_maxMissedShots));
 
-    int activeBars = std::min(m_comboStreak, 5);
-    for (int b = 0; b < 5; ++b) {
-        QRectF barRect(22 + b * 34, 178, 30, 8);
-        if (b < activeBars) {
-            QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
-            painter->setBrush(barCol);
-            painter->setPen(Qt::NoPen);
-            painter->drawRoundedRect(barRect, 2, 2);
-        } else {
-            painter->setBrush(QColor(30, 41, 59, 150));
-            painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
-            painter->drawRoundedRect(barRect, 2, 2);
+        qreal totalBarW = 170.0;
+        qreal singleBarW = (totalBarW - (m_maxMissedShots - 1) * 4.0) / m_maxMissedShots;
+        for (int b = 0; b < m_maxMissedShots; ++b) {
+            QRectF barRect(22 + b * (singleBarW + 4.0), 178, singleBarW, 8);
+            if (b < m_missedShotsCount) {
+                painter->setBrush(QColor(239, 68, 68));
+                painter->setPen(Qt::NoPen);
+                painter->drawRoundedRect(barRect, 2, 2);
+            } else {
+                painter->setBrush(QColor(30, 41, 59, 150));
+                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
+                painter->drawRoundedRect(barRect, 2, 2);
+            }
+        }
+    } else {
+        painter->setPen(QColor(148, 163, 184));
+        painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+        painter->drawText(QRectF(22, 162, 170, 14), QString("OVERDRIVE STREAK (x%1)").arg(m_comboStreak));
+
+        int activeBars = std::min(m_comboStreak, 5);
+        for (int b = 0; b < 5; ++b) {
+            QRectF barRect(22 + b * 34, 178, 30, 8);
+            if (b < activeBars) {
+                QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+                painter->setBrush(barCol);
+                painter->setPen(Qt::NoPen);
+                painter->drawRoundedRect(barRect, 2, 2);
+            } else {
+                painter->setBrush(QColor(30, 41, 59, 150));
+                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
+                painter->drawRoundedRect(barRect, 2, 2);
+            }
         }
     }
 
@@ -886,7 +1119,12 @@ void GameScene::drawLeftHUD(QPainter* painter) {
 
     painter->setPen(QColor(148, 163, 184));
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-    painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
+    if (m_isEndless) {
+        qreal remTime = std::max(0.0, m_currentDropInterval - m_endlessRowTimer);
+        painter->drawText(QRectF(22, 264, 170, 14), QString("ROW ADVANCE IN: %1s").arg(remTime, 0, 'f', 1));
+    } else {
+        painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
+    }
 
     auto dist = m_grid.getColorDistribution();
     int totalBalls = 0;

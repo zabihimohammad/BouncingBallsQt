@@ -84,7 +84,7 @@ private:
     void initSkills();
     void fireBall();
     void snapBallToGrid(const QPointF& hitPos, BallColor color, BallType type);
-    void popMatches(int r, int c, BallColor color, BallType type, BallColor secColor = BallColor::None);
+    bool popMatches(int r, int c, BallColor color, BallType type, BallColor secColor = BallColor::None);
     void checkFloatingBalls();
     void redrawGrid();
     void prepareNextCannonBall();
@@ -94,6 +94,15 @@ private:
     // سیستم مسلح‌سازی مهارت‌ها
     void armSkill(int index);
     void disarmSkill();
+
+    // سیستم محموله‌ها و ارتقای مهمات
+    void addSkillAmmo(BallType skillType, int amount = 1);
+    void grantRandomSupplyDrop();
+
+    // موتور اختصاصی گیم‌مودها
+    void advanceEndlessRow();
+    void triggerWaveEscalation();
+    void addTimeBonus(qreal seconds, const QString& reason);
 
     // پارتیکل و افکت‌ها
     void spawnPopParticles(const QPointF& pos, const QColor& color, int count = 25);
@@ -127,11 +136,21 @@ private:
     int m_shotsHit = 0;
     int m_comboStreak = 0;
 
-    // متغیرهای وضعیت مهارت مسلح
     int m_armedSkillIndex = -1;
     BallColor m_savedBaseColor = BallColor::None;
 
-    // تلمتری
+    bool m_isTimeAttack = false;
+    qreal m_timeRemaining = 75.0;
+
+    bool m_isEndless = false;
+    int m_currentWave = 1;
+    qreal m_waveTimer = 0.0;
+    qreal m_currentDropInterval = 14.0;
+    int m_missedShotsCount = 0;
+    int m_maxMissedShots = 4;
+    qreal m_endlessRowTimer = 0.0;
+    bool m_dangerTelegraph = false;
+
     qreal m_displayedScore = 0.0;
     qreal m_ecgPhase = 0.0;
     qreal m_dangerLevel = 0.0;

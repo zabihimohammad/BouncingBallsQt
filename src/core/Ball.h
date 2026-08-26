@@ -53,6 +53,11 @@ public:
     bool isKey() const { return m_isKey; }
     void setKey(bool key) { m_isKey = key; }
 
+    // جعبه مهمات مداری (Supply Drop)
+    BallType getContainedSkill() const { return m_containedSkill; }
+    void setContainedSkill(BallType skill) { m_containedSkill = skill; }
+    bool hasContainedSkill() const { return m_containedSkill != BallType::Regular; }
+
     int getFreezeLevel() const { return m_freezeLevel; }
     void setFreezeLevel(int level) { m_freezeLevel = level; }
     bool isFrozen() const { return m_freezeLevel > 0; }
@@ -88,5 +93,6 @@ private:
     bool m_isKey = false;
     int m_freezeLevel = 0;
     bool m_isMystery = false;
+    BallType m_containedSkill = BallType::Regular;
     QPointF m_position;
 };

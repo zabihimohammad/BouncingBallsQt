@@ -1,9 +1,9 @@
-#include <map>
 #pragma once
 
 #include "Ball.h"
 #include <vector>
 #include <utility>
+#include <map>
 #include <QPointF>
 
 class GridManager {
@@ -24,7 +24,7 @@ public:
     void clearGrid();
     void loadLevel(int levelNumber);
     void generateRandomLevel();
-    void addRowFromTop();
+    void addRowFromTop(int wave = 1); // پشتیبانی از درجه سختی موج
 
     bool isOccupied(int r, int c) const;
     Ball* getBall(int r, int c);

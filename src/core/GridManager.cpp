@@ -134,7 +134,7 @@ void GridManager::generateRandomLevel() {
     }
 }
 
-void GridManager::addRowFromTop() {
+void GridManager::addRowFromTop(int wave) {
     int lastRow = ROWS - 1;
     for (size_t c = 0; c < m_grid[lastRow].size(); ++c) {
         if (m_grid[lastRow][c]) {
@@ -159,8 +159,57 @@ void GridManager::addRowFromTop() {
         }
     }
 
+    // تولید سطر جدید همراه با تزریق هوشمند موانع و جعبه مهمات
+    auto rng = QRandomGenerator::global();
+    bool hasLockedBallInRow = false;
+
     for (int c = 0; c < COLS_EVEN; ++c) {
-        m_grid[0][c] = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
+        int chance = rng->bounded(100);
+        Ball* newBall = nullptr;
+
+        // ۱. مانع سیاه نفوذناپذیر (از موج ۳ به بعد با شانس کم)
+        if (wave >= 3 && chance < (3 + wave)) {
+            newBall = new Ball(BallColor::Black, BallType::Regular, BallColor::None, 0, c);
+        }
+            // ۲. گوی‌های قفل‌شده (از موج ۲ به بعد)
+        else if (wave >= 2 && chance < (8 + wave * 2)) {
+            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c, true);
+            hasLockedBallInRow = true;
+        }
+            // ۳. گوی‌های یخ‌زده ۲ لایه
+        else if (wave >= 2 && chance < (18 + wave * 3)) {
+            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
+            newBall->setFreezeLevel(rng->bounded(2) + 1);
+        }
+            // ۴. محموله مهمات تاکتیکال (Supply Drop) - شانس ۱۲٪
+        else if (chance < 32) {
+            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
+            int skillR = rng->bounded(3);
+            if (skillR == 0) newBall->setContainedSkill(BallType::Bomb);
+            else if (skillR == 1) newBall->setContainedSkill(BallType::Laser);
+            else newBall->setContainedSkill(BallType::Rainbow);
+        }
+            // ۵. گوی رنگی معمولی با چسبندگی خوشه‌ای
+        else {
+            BallColor col = Ball::getRandomColor(5);
+            if (c > 0 && m_grid[0][c - 1] && rng->bounded(100) < 60) {
+                col = m_grid[0][c - 1]->getPrimaryColor();
+            }
+            newBall = new Ball(col, BallType::Regular, BallColor::None, 0, c);
+        }
+
+        m_grid[0][c] = newBall;
+    }
+
+    // اگر در این سطر گوی قفل‌دار وجود داشت، حتماً یک گوی کلید در سطر قرار گیرد
+    if (hasLockedBallInRow) {
+        int keyCol = rng->bounded(COLS_EVEN);
+        if (m_grid[0][keyCol] && !m_grid[0][keyCol]->isBlack()) {
+            m_grid[0][keyCol]->setLocked(false);
+            m_grid[0][keyCol]->setFreezeLevel(0);
+            m_grid[0][keyCol]->setKey(true);
+            m_grid[0][keyCol]->setPrimaryColor(BallColor::Yellow);
+        }
     }
 }
 
@@ -249,10 +298,9 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
     BallColor c1 = (color != BallColor::None) ? color : startBall->getPrimaryColor();
     BallColor c2 = (color != BallColor::None) ? secondaryColor : startBall->getSecondaryColor();
 
-    // Helper lambda to find all connected matching balls for a given target color
     auto findConnectedForColor = [&](BallColor targetColor) -> std::vector<std::pair<int, int>> {
         if (targetColor == BallColor::None) return {};
-        
+
         std::vector<std::pair<int, int>> matched;
         std::set<std::pair<int, int>> visited;
         std::queue<std::pair<int, int>> q;
@@ -267,8 +315,7 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
             for (auto [nr, nc] : getNeighbors(r, c)) {
                 if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
                     Ball* nb = m_grid[nr][nc];
-                    if (!nb->isLocked() && !nb->isBlack()) {
-                        // A neighbor matches if it has targetColor or is a Rainbow/Dual ball with targetColor
+                    if (!nb->isLocked() && !nb->isBlack() && !nb->isFrozen()) {
                         bool matches = (nb->getPrimaryColor() == targetColor) ||
                                        (nb->getType() == BallType::DualColor && nb->getSecondaryColor() == targetColor) ||
                                        (nb->getType() == BallType::Rainbow);
@@ -283,16 +330,15 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
         return matched;
     };
 
-    // 1. If Rainbow Ball: matches with all adjacent color clusters
     if (matchType == BallType::Rainbow) {
         std::set<std::pair<int, int>> allMatched;
         allMatched.insert({startR, startC});
         for (auto [nr, nc] : getNeighbors(startR, startC)) {
             if (isOccupied(nr, nc)) {
                 Ball* nb = m_grid[nr][nc];
-                if (!nb->isLocked() && !nb->isBlack()) {
+                if (!nb->isLocked() && !nb->isBlack() && !nb->isFrozen()) {
                     auto sub = findConnectedForColor(nb->getPrimaryColor());
-                    if (sub.size() >= 2) { // 2 + rainbow = 3
+                    if (sub.size() >= 2) {
                         for (auto p : sub) allMatched.insert(p);
                     }
                 }
@@ -304,7 +350,6 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
         return {};
     }
 
-    // 2. If Dual Color Ball: checks matches for c1 AND c2 independently!
     if (matchType == BallType::DualColor) {
         std::set<std::pair<int, int>> allMatched;
         auto m1 = findConnectedForColor(c1);
@@ -320,7 +365,6 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
         return std::vector<std::pair<int, int>>(allMatched.begin(), allMatched.end());
     }
 
-    // 3. Regular Ball Matching (Single Color)
     auto m = findConnectedForColor(c1);
     if (m.size() >= 3) {
         return m;
@@ -447,6 +491,7 @@ std::vector<BallColor> GridManager::getRemainingColors() const {
     }
     return std::vector<BallColor>(colors.begin(), colors.end());
 }
+
 std::map<BallColor, int> GridManager::getColorDistribution() const {
     std::map<BallColor, int> counts;
     for (int r = 0; r < ROWS; ++r) {
