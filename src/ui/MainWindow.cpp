@@ -23,6 +23,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_settingsWidget = new SettingsWidget(this);
     m_scoreboardWidget = new ScoreboardWidget(&m_scoreManager, this);
     m_advSettingsWidget = new AdvancedSettingsWidget(this); 
+    m_helpWidget = new HelpWidget(this);
 
     // اضافه کردن به StackedWidget
     m_stackedWidget->addWidget(m_mainMenu);          // Index 0
@@ -30,6 +31,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_stackedWidget->addWidget(m_settingsWidget);      // Index 2
     m_stackedWidget->addWidget(m_scoreboardWidget);    // Index 3
     m_stackedWidget->addWidget(m_advSettingsWidget);   // Index 4
+    m_stackedWidget->addWidget(m_helpWidget);          // Index 5
 
     // -----------------------------------------------------------------
     // اتصالات منوی اصلی
@@ -40,9 +42,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
         m_scoreboardWidget->refresh();
         m_stackedWidget->setCurrentIndex(3);
     });
-    connect(m_mainMenu, &MainMenuWidget::helpClicked, this, [this]() {
-        QMessageBox::information(this, "FIELD MANUAL", "Welcome to CYBER BOUNCE!\n\n1. Play Game to launch your mission.\n2. In-game, use left click to shoot/interact depending on the mode.\n3. Check Leaderboard to see your global standing.\n4. Use Settings to tune graphics and audio.\n\nGood luck, Operative!");
-    });
+    connect(m_mainMenu, &MainMenuWidget::helpClicked, this, [this]() { m_stackedWidget->setCurrentIndex(5); });
     connect(m_mainMenu, &MainMenuWidget::exitClicked, this, &QMainWindow::close);
 
     // -----------------------------------------------------------------
@@ -51,6 +51,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     connect(m_startMenu, &StartGameWidget::launchGame, this, &MainWindow::startNewGame);
     connect(m_startMenu, &StartGameWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
     connect(m_scoreboardWidget, &ScoreboardWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
+    connect(m_helpWidget, &HelpWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });
     
     // بازگشت از مینی‌گیم تنظیمات به منوی اصلی
     connect(m_settingsWidget, &SettingsWidget::backClicked, this, [this]() { m_stackedWidget->setCurrentIndex(0); });

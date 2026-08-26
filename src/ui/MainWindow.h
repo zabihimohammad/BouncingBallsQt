@@ -9,7 +9,8 @@
 #include "StartGameWidget.h"
 #include "SettingsWidget.h"
 #include "ScoreboardWidget.h"
-#include "AdvancedSettingsWidget.h" // <--- اضافه شد
+#include "AdvancedSettingsWidget.h"
+#include "HelpWidget.h"
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -33,6 +34,7 @@ private:
     SettingsWidget* m_settingsWidget;
     ScoreboardWidget* m_scoreboardWidget;
     AdvancedSettingsWidget* m_advSettingsWidget; // <--- اضافه شد
+    HelpWidget* m_helpWidget;
 
     GameView* m_gameView = nullptr;
     GameScene* m_gameScene = nullptr;
