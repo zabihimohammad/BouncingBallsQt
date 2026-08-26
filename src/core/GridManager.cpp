@@ -44,12 +44,78 @@ BallColor GridManager::getStandardColor(int index) {
 
 void GridManager::loadLevel(int levelNumber) {
     clearGrid();
-    int rowsToFill = 5;
-    for (int r = 0; r < rowsToFill; ++r) {
-        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
-        for (int c = 0; c < cols; ++c) {
-            BallColor col = getStandardColor(c + r + levelNumber);
-            m_grid[r][c] = new Ball(col, BallType::Regular, BallColor::None, r, c);
+
+    if (levelNumber == 1) {
+        for (int r = 0; r < 4; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                BallColor col = (c % 3 == 0) ? BallColor::Red : ((c % 3 == 1) ? BallColor::Blue : BallColor::Green);
+                m_grid[r][c] = new Ball(col, BallType::Regular, BallColor::None, r, c);
+            }
+        }
+    } else if (levelNumber == 2) {
+        for (int r = 0; r < 3; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                BallColor col = (r == 0) ? BallColor::Yellow : ((c % 2 == 0) ? BallColor::Purple : BallColor::Blue);
+                m_grid[r][c] = new Ball(col, BallType::Regular, BallColor::None, r, c);
+            }
+        }
+        for (int r = 3; r < 5; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                auto* b = new Ball(Ball::getRandomColor(4), BallType::Regular, BallColor::None, r, c);
+                b->setFreezeLevel(r == 4 ? 2 : 1);
+                m_grid[r][c] = b;
+            }
+        }
+    } else if (levelNumber == 3) {
+        for (int r = 0; r < 5; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                BallColor col = getStandardColor(r + c);
+                auto* b = new Ball(col, BallType::Regular, BallColor::None, r, c);
+                if (r <= 1 && (c == 0 || c == cols - 1)) {
+                    b->setLocked(true);
+                }
+                m_grid[r][c] = b;
+            }
+        }
+        if (m_grid[3][3]) {
+            m_grid[3][3]->setKey(true);
+            m_grid[3][3]->setPrimaryColor(BallColor::Yellow);
+        }
+    } else if (levelNumber == 4) {
+        for (int r = 0; r < 5; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                if ((r == 1 && c == 4) || (r == 3 && (c == 2 || c == 7))) {
+                    m_grid[r][c] = new Ball(BallColor::Black, BallType::Regular, BallColor::None, r, c);
+                } else {
+                    auto* b = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, r, c);
+                    if (r >= 3) b->setMystery(true);
+                    m_grid[r][c] = b;
+                }
+            }
+        }
+    } else {
+        for (int r = 0; r < 6; ++r) {
+            int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+            for (int c = 0; c < cols; ++c) {
+                if (r == 2 && (c == 2 || c == cols - 3)) {
+                    m_grid[r][c] = new Ball(BallColor::Black, BallType::Regular, BallColor::None, r, c);
+                } else {
+                    auto* b = new Ball(getStandardColor(r * 2 + c), BallType::Regular, BallColor::None, r, c);
+                    if (r == 0 && (c == 3 || c == 8)) b->setLocked(true);
+                    if (r == 4) b->setFreezeLevel(2);
+                    if (r == 5) b->setMystery(true);
+                    m_grid[r][c] = b;
+                }
+            }
+        }
+        if (m_grid[3][5]) {
+            m_grid[3][5]->setKey(true);
+            m_grid[3][5]->setPrimaryColor(BallColor::Yellow);
         }
     }
 }
@@ -60,7 +126,6 @@ void GridManager::generateRandomLevel() {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
             BallColor chosen = Ball::getRandomColor(5);
-            // ۶۵٪ شانس اتصال همسایه‌ها برای ایجاد کلاسترهای قابل حذف
             if (c > 0 && m_grid[r][c - 1] && QRandomGenerator::global()->bounded(100) < 65) {
                 chosen = m_grid[r][c - 1]->getPrimaryColor();
             }
@@ -139,7 +204,7 @@ void GridManager::removeBall(int r, int c) {
 QPointF GridManager::getCenterPos(int r, int c) const {
     qreal x = BALL_RADIUS + c * BALL_DIAMETER;
     if (r % 2 != 0) {
-        x += BALL_RADIUS; // آفست سطرهای فرد در شبکه هگزاگونال
+        x += BALL_RADIUS;
     }
     qreal y = BALL_RADIUS + r * (BALL_DIAMETER * 0.866025);
     return QPointF(x, y);
@@ -199,7 +264,6 @@ std::vector<std::pair<int, int>> GridManager::findMatches(int startR, int startC
             auto [r, c] = q.front();
             q.pop();
             matched.push_back({r, c});
-
             for (auto [nr, nc] : getNeighbors(r, c)) {
                 if (isOccupied(nr, nc) && visited.find({nr, nc}) == visited.end()) {
                     Ball* nb = m_grid[nr][nc];
@@ -268,7 +332,6 @@ std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
     std::set<std::pair<int, int>> connectedToTop;
     std::queue<std::pair<int, int>> q;
 
-    // شروع Flood-Fill از تمام توپ‌های سطر اول متصل به سقف
     for (int c = 0; c < COLS_EVEN; ++c) {
         if (isOccupied(0, c)) {
             q.push({0, c});
@@ -288,7 +351,6 @@ std::vector<std::pair<int, int>> GridManager::findFloatingBalls() {
         }
     }
 
-    // جداسازی تمام توپ‌هایی که هیچ اتصالی به سقف ندارند
     std::vector<std::pair<int, int>> floating;
     for (int r = 0; r < ROWS; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
@@ -315,18 +377,36 @@ std::vector<std::pair<int, int>> GridManager::explodeBomb(int centerR, int cente
     return destroyed;
 }
 
-std::vector<std::pair<int, int>> GridManager::unlockNeighbors(int r, int c) {
-    std::vector<std::pair<int, int>> unlocked;
+std::vector<std::pair<int, int>> GridManager::damageNeighbors(int r, int c, bool keyPopped) {
+    std::vector<std::pair<int, int>> affected;
     for (const auto& nb : getNeighbors(r, c)) {
         if (isOccupied(nb.first, nb.second)) {
             Ball* b = m_grid[nb.first][nb.second];
-            if (b && b->isLocked()) {
-                b->unlock();
-                unlocked.push_back(nb);
+            if (b) {
+                if (b->damageIce()) affected.push_back(nb);
+                if (b->isMystery()) {
+                    b->revealMystery();
+                    affected.push_back(nb);
+                }
             }
         }
     }
-    return unlocked;
+
+    if (keyPopped) {
+        unlockAllChainedBalls();
+    }
+    return affected;
+}
+
+void GridManager::unlockAllChainedBalls() {
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (isOccupied(r, c) && m_grid[r][c]->isLocked()) {
+                m_grid[r][c]->unlock();
+            }
+        }
+    }
 }
 
 bool GridManager::isBottomReached() const {

@@ -9,7 +9,7 @@
 class AimLineItem : public QObject, public QGraphicsItem {
     Q_OBJECT
 public:
-    AimLineItem(qreal minX, qreal maxX, qreal sceneHeight, qreal ballRadius);
+    AimLineItem(qreal minX = 224.0, qreal maxX = 576.0, qreal sceneHeight = 600.0, qreal ballRadius = 22.0);
     QRectF boundingRect() const override;
     void paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) override;
 
