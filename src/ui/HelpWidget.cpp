@@ -1,4 +1,5 @@
 #include "HelpWidget.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QMouseEvent>
 #include <QCoreApplication>
@@ -63,11 +64,15 @@ void HelpWidget::paintEvent(QPaintEvent* event) {
 }
 
 void HelpWidget::drawBackground(QPainter& p) {
+    int baseHue = ThemeManager::instance().getBaseHue();
     QLinearGradient bgGrad(0, 0, width(), height());
-    bgGrad.setColorAt(0.0, QColor(4, 6, 12));
-    bgGrad.setColorAt(1.0, QColor(10, 15, 30));
+    bgGrad.setColorAt(0.0, QColor::fromHsv(baseHue, 220, 16));
+    bgGrad.setColorAt(1.0, QColor::fromHsv(baseHue, 240, 6));
     p.fillRect(rect(), bgGrad);
-    p.setPen(QPen(QColor(0, 242, 254, 15), 1));
+    
+    QColor gridCol = ThemeManager::instance().getPrimaryColor();
+    gridCol.setAlpha(20);
+    p.setPen(QPen(gridCol, 1));
     for (int x = 0; x < width(); x += 40) p.drawLine(x, 0, x, height());
     for (int y = 0; y < height(); y += 40) p.drawLine(0, y, width(), y);
 }
@@ -82,6 +87,7 @@ void HelpWidget::drawMenu(QPainter& p) {
     bool showPro = m_menuItems[3].isExpanded && showBasic;
     
     qreal y = startY;
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
     
     for (int i = 0; i < m_menuItems.size(); ++i) {
         auto& item = m_menuItems[i];
@@ -99,9 +105,11 @@ void HelpWidget::drawMenu(QPainter& p) {
         bool isHovered = (m_hoveredId == item.id);
         bool isActive = (item.type == 1 && item.videoIndex == m_activeVideoIndex);
         
-        QColor bgColor = isActive ? QColor(0, 242, 254, 80) : (isHovered ? QColor(255, 255, 255, 20) : QColor(255, 255, 255, 5));
+        QColor bgActive = priCol;
+        bgActive.setAlpha(80);
+        QColor bgColor = isActive ? bgActive : (isHovered ? QColor(255, 255, 255, 20) : QColor(255, 255, 255, 5));
         p.setBrush(bgColor);
-        p.setPen(QPen(isActive ? QColor(0, 242, 254) : QColor(100, 100, 100), item.type == 0 ? 1 : 2));
+        p.setPen(QPen(isActive ? priCol : QColor(100, 100, 100), item.type == 0 ? 1 : 2));
         p.drawRoundedRect(item.rect, 5, 5);
         
         if (isActive) {
@@ -117,7 +125,7 @@ void HelpWidget::drawMenu(QPainter& p) {
             prefix = "└ ";
         }
         
-        p.setPen(isActive ? Qt::white : (isHovered ? QColor(200, 220, 255) : QColor(180, 180, 200)));
+        p.setPen(isActive ? Qt::white : (isHovered ? priCol.lighter(130) : QColor(180, 180, 200)));
         QFont f("Consolas", item.type == 0 ? 15 : 13, isActive ? QFont::Bold : QFont::Normal);
         p.setFont(f);
         p.drawText(QRectF(item.rect.left() + 15, item.rect.top(), tabW - indent - 15, tabH), Qt::AlignLeft | Qt::AlignVCenter, prefix + item.text);
@@ -128,8 +136,12 @@ void HelpWidget::drawMenu(QPainter& p) {
 
 void HelpWidget::drawContent(QPainter& p) {
     QRectF contentRect(400, 100, width() - 440, height() - 140);
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    
     p.setBrush(QColor(10, 15, 30, 200));
-    p.setPen(QPen(QColor(0, 242, 254, 150), 2));
+    QColor borderCol = priCol;
+    borderCol.setAlpha(150);
+    p.setPen(QPen(borderCol, 2));
     p.drawRoundedRect(contentRect, 10, 10);
     
     p.setPen(Qt::white);
@@ -157,7 +169,7 @@ void HelpWidget::drawContent(QPainter& p) {
             QPointF pos = animRect.center() - QPointF(scaled.width()/2.0, scaled.height()/2.0);
             p.drawImage(pos, scaled);
             p.setBrush(Qt::NoBrush);
-            p.setPen(QPen(QColor(0, 242, 254, 150), 2));
+            p.setPen(QPen(borderCol, 2));
             p.drawRect(QRectF(pos, scaled.size()));
         }
     } else {
@@ -181,9 +193,12 @@ void HelpWidget::drawContent(QPainter& p) {
 
 void HelpWidget::drawNeonBackButton(QPainter& painter) {
     m_backBtnRect = QRectF(20, 20, 130, 45);
+    QColor secCol = ThemeManager::instance().getSecondaryColor();
     if (m_backHovered) {
-        painter.setBrush(QColor(255, 51, 102, 100)); 
-        painter.setPen(QPen(QColor(255, 51, 102), 2));
+        QColor hoverBg = secCol;
+        hoverBg.setAlpha(100);
+        painter.setBrush(hoverBg); 
+        painter.setPen(QPen(secCol, 2));
     } else {
         painter.setBrush(QColor(15, 23, 42, 200));
         painter.setPen(QPen(QColor(148, 163, 184), 1.5));

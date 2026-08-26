@@ -498,8 +498,14 @@ void MainMenuWidget::drawHyperdriveTransition(QPainter& painter) {
 }
 
 void MainMenuWidget::drawNebulaBackground(QPainter& painter) {
-    QColor bg = ThemeManager::instance().getPrimaryColor();
-    painter.fillRect(rect(), QColor(bg.red()/12, bg.green()/12, bg.blue()/12));
+    int baseHue = ThemeManager::instance().getBaseHue();
+    QColor bgTop = QColor::fromHsv(baseHue, 220, 16);
+    QColor bgBottom = QColor::fromHsv(baseHue, 240, 8);
+    
+    QLinearGradient bgGrad(0, 0, 0, height());
+    bgGrad.setColorAt(0.0, bgTop);
+    bgGrad.setColorAt(1.0, bgBottom);
+    painter.fillRect(rect(), bgGrad);
     
     if (m_isVortexActive) {
         QRadialGradient vortex(m_mousePos, 320);
@@ -509,20 +515,30 @@ void MainMenuWidget::drawNebulaBackground(QPainter& painter) {
         painter.fillRect(rect(), vortex);
     } else {
         QRadialGradient neb1(width() * 0.3, height() * 0.4, height() * 0.7);
-        neb1.setColorAt(0.0, QColor(0, 242, 254, 18));
+        QColor nC1 = ThemeManager::instance().getPrimaryColor();
+        nC1.setAlpha(35);
+        neb1.setColorAt(0.0, nC1);
         neb1.setColorAt(1.0, Qt::transparent);
         painter.fillRect(rect(), neb1);
 
         QRadialGradient neb2(width() * 0.7, height() * 0.6, height() * 0.7);
-        neb2.setColorAt(0.0, QColor(255, 51, 102, 14));
+        QColor nC2 = ThemeManager::instance().getSecondaryColor();
+        nC2.setAlpha(30);
+        neb2.setColorAt(0.0, nC2);
         neb2.setColorAt(1.0, Qt::transparent);
         painter.fillRect(rect(), neb2);
     }
 
     painter.setPen(Qt::NoPen);
-    for (const auto& b : m_bubbles) {
-        int alpha = qBound(5, int(45 / b.zDepth), 255);
-        painter.setBrush(QColor(255, 255, 255, alpha)); 
+    for (int i = 0; i < m_bubbles.size(); ++i) {
+        const auto& b = m_bubbles[i];
+        int alpha = qBound(5, int(55 / b.zDepth), 255);
+        QColor bCol;
+        if (i % 3 == 0) bCol = ThemeManager::instance().getPrimaryColor();
+        else if (i % 3 == 1) bCol = ThemeManager::instance().getSecondaryColor();
+        else bCol = Qt::white;
+        bCol.setAlpha(alpha);
+        painter.setBrush(bCol); 
         painter.drawEllipse(b.pos, b.size, b.size);
     }
 }
@@ -672,8 +688,26 @@ void MainMenuWidget::drawHolographicTitle(QPainter& painter) {
 }
 
 void MainMenuWidget::drawReactorNodes(QPainter& painter) {
+    int baseHue = ThemeManager::instance().getBaseHue();
     for (int i = 0; i < m_reactors.size(); ++i) {
-        const auto& r = m_reactors[i];
+        auto r = m_reactors[i];
+        if (r.id == 0) { // IGNITION (PLAY)
+            r.primaryColor = ThemeManager::instance().getPrimaryColor();
+            r.accentColor = Qt::white;
+        } else if (r.id == 1) { // SETTINGS
+            r.primaryColor = ThemeManager::instance().getSecondaryColor();
+            r.accentColor = ThemeManager::instance().getPrimaryColor();
+        } else if (r.id == 2) { // LEADERBOARD
+            r.primaryColor = QColor::fromHsv((baseHue + 45) % 360, 230, 255);
+            r.accentColor = Qt::white;
+        } else if (r.id == 3) { // EXIT
+            r.primaryColor = QColor::fromHsv((baseHue + 180) % 360, 220, 255);
+            r.accentColor = Qt::white;
+        } else if (r.id == 4) { // HELP
+            r.primaryColor = QColor::fromHsv((baseHue + 90) % 360, 220, 255);
+            r.accentColor = Qt::white;
+        }
+
         QPointF p = r.currentPos;
         qreal rEff = r.radius * (1.0 + r.hover * 0.15);
 

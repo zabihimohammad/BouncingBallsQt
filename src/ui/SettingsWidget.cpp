@@ -208,11 +208,37 @@ void SettingsWidget::handleTargetAction(TargetType type, const QPointF& hitPos) 
         break;
             
     case TargetType::ThemeNeon: 
-        if (m_currentTheme != "Cyber Neon") {
-            m_currentTheme = "Cyber Neon"; 
-            m_isGlitching = true;
-            m_glitchWave = 0.0;
-        }
+        ThemeManager::instance().setTheme(ThemeId::CyberNeon);
+        m_currentTheme = "Cyber Neon";
+        m_isGlitching = true;
+        m_glitchWave = 0.0;
+        triggerEMP(hitPos); 
+        SoundManager::instance().playPop();
+        break;
+            
+    case TargetType::ThemeCosmic: 
+        ThemeManager::instance().setTheme(ThemeId::CosmicVoid);
+        m_currentTheme = "Cosmic Void";
+        m_isGlitching = true;
+        m_glitchWave = 0.0;
+        triggerEMP(hitPos); 
+        SoundManager::instance().playPop();
+        break;
+
+    case TargetType::ThemeSolar: 
+        ThemeManager::instance().setTheme(ThemeId::SolarFlare);
+        m_currentTheme = "Solar Flare";
+        m_isGlitching = true;
+        m_glitchWave = 0.0;
+        triggerEMP(hitPos); 
+        SoundManager::instance().playPop();
+        break;
+
+    case TargetType::ThemeMatrix: 
+        ThemeManager::instance().setTheme(ThemeId::MatrixGreen);
+        m_currentTheme = "Matrix Green";
+        m_isGlitching = true;
+        m_glitchWave = 0.0;
         triggerEMP(hitPos); 
         SoundManager::instance().playPop();
         break;
@@ -391,27 +417,38 @@ void SettingsWidget::paintEvent(QPaintEvent* event) {
 }
 
 void SettingsWidget::drawNebulaBackground(QPainter& painter) {
+    int baseHue = ThemeManager::instance().getBaseHue();
+    QColor bgTop = QColor::fromHsv(baseHue, 220, 18);
+    QColor bgBottom = QColor::fromHsv(baseHue, 240, 6);
+    
     QLinearGradient bgGrad(0, 0, 0, height());
-    if (m_currentTheme == "Cyber Neon") {
-        bgGrad.setColorAt(0.0, QColor(6, 9, 15)); 
-        bgGrad.setColorAt(1.0, QColor(2, 3, 5));
-    } else {
-        bgGrad.setColorAt(0.0, QColor(20, 5, 10)); 
-        bgGrad.setColorAt(1.0, QColor(5, 1, 2));
-    }
+    bgGrad.setColorAt(0.0, bgTop); 
+    bgGrad.setColorAt(1.0, bgBottom);
     painter.fillRect(rect(), bgGrad);
 
-    // سحابی
-    QRadialGradient neb(width()*0.5, height()*0.5, height());
-    QColor nC = ThemeManager::instance().getPrimaryColor(); nC.setAlpha(30);
-    neb.setColorAt(0, nC);
-    neb.setColorAt(1, Qt::transparent);
-    painter.fillRect(rect(), neb);
+    // سحابی مرکزی با رنگ تم
+    QRadialGradient neb1(width() * 0.35, height() * 0.45, height() * 0.8);
+    QColor nC1 = ThemeManager::instance().getPrimaryColor(); 
+    nC1.setAlpha(45);
+    neb1.setColorAt(0, nC1);
+    neb1.setColorAt(1, Qt::transparent);
+    painter.fillRect(rect(), neb1);
 
-    for (auto& star : m_stars) {
+    QRadialGradient neb2(width() * 0.7, height() * 0.55, height() * 0.7);
+    QColor nC2 = ThemeManager::instance().getSecondaryColor(); 
+    nC2.setAlpha(40);
+    neb2.setColorAt(0, nC2);
+    neb2.setColorAt(1, Qt::transparent);
+    painter.fillRect(rect(), neb2);
+
+    for (int i = 0; i < m_stars.size(); ++i) {
+        auto& star = m_stars[i];
         qreal currentBright = (std::sin(m_time * star.speed + star.phase) + 1.0) / 2.0;
-        QColor c = star.color;
-        c.setAlpha(int(currentBright * 200 + 30));
+        QColor c;
+        if (i % 3 == 0) c = ThemeManager::instance().getPrimaryColor();
+        else if (i % 3 == 1) c = ThemeManager::instance().getSecondaryColor();
+        else c = Qt::white;
+        c.setAlpha(int(currentBright * 200 + 40));
         painter.setPen(Qt::NoPen);
         painter.setBrush(c);
         painter.drawEllipse(star.pos, star.size, star.size);
@@ -545,7 +582,7 @@ void SettingsWidget::drawAdvancedCannon(QPainter& painter) {
     QColor heatColor = QColor(255, 50, 0);
     
     painter.setBrush(barrelColor);
-    painter.setPen(QPen(QColor(0, 242, 254), 3));
+    painter.setPen(QPen(ThemeManager::instance().getPrimaryColor(), 3));
     painter.drawRect(0, -14, 60, 28);
     
     // درخشش حرارتی سر لوله
@@ -567,14 +604,16 @@ void SettingsWidget::drawAdvancedCannon(QPainter& painter) {
     painter.drawEllipse(QPointF(0, 0), 30, 30);
     
     // نماد انرژی داخل توپ
-    painter.setBrush(m_cannonHeat > 0.7 ? heatColor : QColor(0, 242, 254));
+    painter.setBrush(m_cannonHeat > 0.7 ? heatColor : ThemeManager::instance().getPrimaryColor());
     painter.drawPolygon(QPolygonF() << QPointF(0, -15) << QPointF(15, 15) << QPointF(-15, 15));
     
     painter.restore();
 
     // خط نشانه‌گیر لیزری
     if (!m_isFiring) {
-        painter.setPen(QPen(QColor(0, 242, 254, 80), 2, Qt::DashLine));
+        QColor aimCol = ThemeManager::instance().getPrimaryColor();
+        aimCol.setAlpha(80);
+        painter.setPen(QPen(aimCol, 2, Qt::DashLine));
         painter.drawLine(QPointF(width() / 2.0, height() - 40.0), m_mousePos);
     }
 }
@@ -588,8 +627,13 @@ void SettingsWidget::drawHUD(QPainter& painter) {
 
     // رابط هولوگرامی بالا
     QRectF hudRect(20, 20, width() - 40, 70);
-    painter.setBrush(QColor(0, 242, 254, 20));
-    painter.setPen(QPen(QColor(0, 242, 254, 150), 2));
+    QColor hudBg = ThemeManager::instance().getPrimaryColor();
+    hudBg.setAlpha(20);
+    painter.setBrush(hudBg);
+    
+    QColor hudBorder = ThemeManager::instance().getPrimaryColor();
+    hudBorder.setAlpha(150);
+    painter.setPen(QPen(hudBorder, 2));
     painter.drawRect(hudRect);
     
     // براکت‌های گوشه
@@ -597,7 +641,7 @@ void SettingsWidget::drawHUD(QPainter& painter) {
     painter.drawLine(hudRect.topLeft(), hudRect.topLeft() + QPointF(15, 0));
     painter.drawLine(hudRect.topLeft(), hudRect.topLeft() + QPointF(0, 15));
     
-    painter.setPen(QColor(0, 242, 254, 255));
+    painter.setPen(ThemeManager::instance().getPrimaryColor());
     painter.setFont(QFont("Consolas", 16, QFont::Bold));
     QString statusText = QString("[ SYSTEM OVERRIDE ]  VOL: %1%  |  DISP: %2  |  THEME: %3")
                          .arg(m_volume)

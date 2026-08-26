@@ -1,4 +1,5 @@
 #include "ScoreboardWidget.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QRandomGenerator>
 #include <QMouseEvent>
@@ -247,15 +248,29 @@ void ScoreboardWidget::paintEvent(QPaintEvent* event) {
 }
 
 void ScoreboardWidget::drawDeepSpace(QPainter& painter) {
+    int baseHue = ThemeManager::instance().getBaseHue();
     QLinearGradient bgGrad(0, 0, width(), height());
-    bgGrad.setColorAt(0.0, QColor(2, 4, 12));
-    bgGrad.setColorAt(1.0, QColor(8, 16, 28));
+    bgGrad.setColorAt(0.0, QColor::fromHsv(baseHue, 220, 14));
+    bgGrad.setColorAt(1.0, QColor::fromHsv(baseHue, 240, 6));
     painter.fillRect(rect(), bgGrad);
 
+    // سحابی دور دست کهکشانی
+    QRadialGradient neb(width()*0.5, height()*0.5, width()*0.6);
+    QColor nebCol = ThemeManager::instance().getPrimaryColor();
+    nebCol.setAlpha(25);
+    neb.setColorAt(0.0, nebCol);
+    neb.setColorAt(1.0, Qt::transparent);
+    painter.fillRect(rect(), neb);
+
     painter.setPen(Qt::NoPen);
-    for (const auto& sd : m_stardust) {
+    for (int i = 0; i < m_stardust.size(); ++i) {
+        const auto& sd = m_stardust[i];
         qreal size = sd.size * (1.0 + (m_zoomFactor - 1.0) * 0.2);
-        QColor c(255, 255, 255, int(255 * sd.brightness));
+        QColor c;
+        if (i % 3 == 0) c = ThemeManager::instance().getPrimaryColor();
+        else if (i % 3 == 1) c = ThemeManager::instance().getSecondaryColor();
+        else c = Qt::white;
+        c.setAlpha(int(255 * sd.brightness));
         painter.setBrush(c);
         painter.drawEllipse(sd.pos, size, size);
     }
@@ -270,8 +285,12 @@ void ScoreboardWidget::drawConstellationTitle(QPainter& painter) {
     qreal leftOffset = (width() - 800) / 2.0;
     painter.translate(leftOffset, topOffset);
     
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    QColor lineCol = priCol;
+    lineCol.setAlpha(80);
+
     // رسم خطوط بین نودهای نزدیک
-    painter.setPen(QPen(QColor(0, 242, 254, 80), 1.0));
+    painter.setPen(QPen(lineCol, 1.0));
     for (int i = 0; i < m_titleNodes.size(); ++i) {
         for (int j = i + 1; j < m_titleNodes.size(); ++j) {
             qreal dist = std::hypot(m_titleNodes[i].x() - m_titleNodes[j].x(), m_titleNodes[i].y() - m_titleNodes[j].y());
@@ -293,7 +312,9 @@ void ScoreboardWidget::drawConstellationTitle(QPainter& painter) {
     QFont font("Segoe UI", 70, QFont::Black);
     font.setLetterSpacing(QFont::AbsoluteSpacing, 10.0);
     painter.setFont(font);
-    painter.setPen(QColor(0, 242, 254, 20));
+    QColor glowText = priCol;
+    glowText.setAlpha(20);
+    painter.setPen(glowText);
     painter.drawText(QRectF(0, 0, 800, 150), Qt::AlignCenter, "LEADERBOARD");
     painter.restore();
 }
@@ -312,7 +333,9 @@ void ScoreboardWidget::drawSystemLabel(QPainter& painter, const StarSystem& sys)
 }
 
 void ScoreboardWidget::drawOrbitRings(QPainter& painter, const StarSystem& sys) {
-    painter.setPen(QPen(QColor(0, 242, 254, 30), 1, Qt::DashLine));
+    QColor ringCol = ThemeManager::instance().getPrimaryColor();
+    ringCol.setAlpha(40);
+    painter.setPen(QPen(ringCol, 1, Qt::DashLine));
     painter.setBrush(Qt::NoBrush);
     for (const auto& cs : sys.planets) {
         if (cs.orbitRadius > 0) {
@@ -490,7 +513,7 @@ void ScoreboardWidget::drawDossierOverlay(QPainter& painter, const CelestialScor
         painter.setPen(Qt::NoPen);
         painter.drawRoundedRect(rowRect, 3, 3);
         
-        painter.setBrush(QColor(0, 242, 254));
+        painter.setBrush(ThemeManager::instance().getPrimaryColor());
         painter.drawRect(rowRect.left() + 5, rowRect.top() + 8, 4, 14);
 
         painter.setPen(Qt::white);
@@ -512,10 +535,13 @@ void ScoreboardWidget::drawDossierOverlay(QPainter& painter, const CelestialScor
 
 void ScoreboardWidget::drawNeonBackButton(QPainter& painter) {
     m_backBtnRect = QRectF(20, 20, 130, 45);
+    QColor secCol = ThemeManager::instance().getSecondaryColor();
     
     if (m_backHovered) {
-        painter.setBrush(QColor(255, 51, 102, 100)); 
-        painter.setPen(QPen(QColor(255, 51, 102), 2));
+        QColor hoverBg = secCol;
+        hoverBg.setAlpha(100);
+        painter.setBrush(hoverBg); 
+        painter.setPen(QPen(secCol, 2));
     } else {
         painter.setBrush(QColor(15, 23, 42, 200));
         painter.setPen(QPen(QColor(148, 163, 184), 1.5));

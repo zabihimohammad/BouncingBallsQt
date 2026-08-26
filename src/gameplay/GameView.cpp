@@ -160,12 +160,13 @@ void GameView::drawBackground(QPainter* painter, const QRectF&) {
 
             // Multi-colored stars
             QColor starCol;
-            if (stars[i].type == 0) starCol = QColor(255, 255, 255, starAlpha);        // Brilliant Diamond White
+            if (stars[i].type == 0) starCol = QColor(255, 255, 255);        // Brilliant Diamond White
             else if (stars[i].type == 1) starCol = ThemeManager::instance().getPrimaryColor();
             else if (stars[i].type == 2) starCol = ThemeManager::instance().getSecondaryColor();
-            else if (stars[i].type == 3) starCol = QColor::fromHsv(themeBaseHue, 180, 255, starAlpha);
-            else if (stars[i].type == 4) starCol = QColor::fromHsv((themeBaseHue+40)%360, 180, 255, starAlpha);
-            else starCol = QColor::fromHsv((themeBaseHue+320)%360, 180, 255, starAlpha);                         // Emerald Nebula Star
+            else if (stars[i].type == 3) starCol = QColor::fromHsv(themeBaseHue, 180, 255);
+            else if (stars[i].type == 4) starCol = QColor::fromHsv((themeBaseHue+40)%360, 180, 255);
+            else starCol = QColor::fromHsv((themeBaseHue+320)%360, 180, 255);
+            starCol.setAlpha(starAlpha);
 
             qreal sz = stars[i].size;
 

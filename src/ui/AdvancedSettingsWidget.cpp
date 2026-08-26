@@ -1,4 +1,5 @@
 #include "AdvancedSettingsWidget.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
@@ -23,8 +24,8 @@ AdvancedSettingsWidget::AdvancedSettingsWidget(QWidget* parent) : QWidget(parent
 
 void AdvancedSettingsWidget::initOrbit() {
     m_nodes.clear();
-    m_nodes.push_back({0.0,   "AUDIO\nLAUNCHER", QColor(0, 242, 254), QPointF(), 1.0, 0.0});
-    m_nodes.push_back({90.0,  "GRAPHICS\nREACTOR", QColor(255, 51, 102), QPointF(), 1.0, 0.0});
+    m_nodes.push_back({0.0,   "AUDIO\nLAUNCHER", ThemeManager::instance().getPrimaryColor(), QPointF(), 1.0, 0.0});
+    m_nodes.push_back({90.0,  "GRAPHICS\nREACTOR", ThemeManager::instance().getSecondaryColor(), QPointF(), 1.0, 0.0});
     m_nodes.push_back({180.0, "HAPTICS\nSEISMOGRAPH", QColor(51, 255, 153), QPointF(), 1.0, 0.0});
     m_nodes.push_back({270.0, "DISPLAY\nGEARBOX", QColor(255, 204, 0), QPointF(), 1.0, 0.0});
 }
@@ -42,8 +43,8 @@ void AdvancedSettingsWidget::generateStars(int w, int h) {
         s.phase = rng->bounded(314) / 100.0;
         
         int r = rng->bounded(100);
-        if (r < 15) s.color = QColor(0, 242, 254);
-        else if (r < 30) s.color = QColor(255, 51, 102);
+        if (r < 20) s.color = ThemeManager::instance().getPrimaryColor();
+        else if (r < 40) s.color = ThemeManager::instance().getSecondaryColor();
         else s.color = QColor(255, 255, 255, rng->bounded(80, 200));
         
         m_bgStars.append(s);
@@ -511,9 +512,11 @@ void AdvancedSettingsWidget::paintEvent(QPaintEvent* event) {
     drawHUDTelemetry(painter);
 
     // دکمه بازگشت
-    QColor btnColor = m_backHovered ? QColor(255, 51, 102) : QColor(0, 242, 254);
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    QColor secCol = ThemeManager::instance().getSecondaryColor();
+    QColor btnColor = m_backHovered ? secCol : priCol;
     painter.setPen(QPen(btnColor, 2));
-    painter.setBrush(m_backHovered ? QColor(255, 51, 102, 60) : QColor(0, 242, 254, 25));
+    painter.setBrush(m_backHovered ? QColor(secCol.red(), secCol.green(), secCol.blue(), 60) : QColor(priCol.red(), priCol.green(), priCol.blue(), 25));
     painter.drawRoundedRect(m_backButtonRect, 8, 8);
 
     painter.setPen(Qt::white);
@@ -525,16 +528,24 @@ void AdvancedSettingsWidget::paintEvent(QPaintEvent* event) {
 }
 
 void AdvancedSettingsWidget::drawNebulaAndAtmosphere(QPainter& painter) {
-    painter.fillRect(rect(), QColor(2, 4, 10));
+    int baseHue = ThemeManager::instance().getBaseHue();
+    QLinearGradient bgGrad(0, 0, width(), height());
+    bgGrad.setColorAt(0.0, QColor::fromHsv(baseHue, 220, 15));
+    bgGrad.setColorAt(1.0, QColor::fromHsv(baseHue, 240, 6));
+    painter.fillRect(rect(), bgGrad);
 
     // سحابی‌های رنگی
     QRadialGradient neb1(width()*0.2, height()*0.3, 800);
-    neb1.setColorAt(0, QColor(0, 150, 255, 35));
+    QColor n1 = ThemeManager::instance().getPrimaryColor();
+    n1.setAlpha(35);
+    neb1.setColorAt(0, n1);
     neb1.setColorAt(1, Qt::transparent);
     painter.fillRect(rect(), neb1);
     
     QRadialGradient neb2(width()*0.8, height()*0.7, 900);
-    neb2.setColorAt(0, QColor(255, 51, 102, 30));
+    QColor n2 = ThemeManager::instance().getSecondaryColor();
+    n2.setAlpha(30);
+    neb2.setColorAt(0, n2);
     neb2.setColorAt(1, Qt::transparent);
     painter.fillRect(rect(), neb2);
 
@@ -550,23 +561,27 @@ void AdvancedSettingsWidget::drawNebulaAndAtmosphere(QPainter& painter) {
 
     // خطوط صورت فلکی
     int constAlpha = m_inSubMenu ? 25 : 120; 
-    painter.setPen(QPen(QColor(0, 242, 254, constAlpha / 2), 1.5, Qt::DashLine)); 
+    QColor constCol = ThemeManager::instance().getPrimaryColor();
+    painter.setPen(QPen(QColor(constCol.red(), constCol.green(), constCol.blue(), constAlpha / 2), 1.5, Qt::DashLine)); 
     for (const QPolygonF& poly : m_constellationPolys) painter.drawPolyline(poly); 
     
     for (const auto& s : m_constellationStars) {
         int alpha = (constAlpha / 2) + (constAlpha) * std::abs(std::sin(m_time * 2.5 + s.phase));
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 242, 254, alpha));
+        painter.setBrush(QColor(constCol.red(), constCol.green(), constCol.blue(), alpha));
         painter.drawEllipse(s.pos, s.size, s.size);
     }
 }
 
 void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, int cy, qreal radius) {
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    QColor secCol = ThemeManager::instance().getSecondaryColor();
+
     // ۱. هاله اتمسفر دور سیاره مرکزی
     qreal haloRadius = radius * 1.4;
     QRadialGradient atmosphere(cx, cy, haloRadius);
     atmosphere.setColorAt(0.70, Qt::transparent);
-    atmosphere.setColorAt(0.85, QColor(0, 242, 254, int(120 * m_currentScale)));
+    atmosphere.setColorAt(0.85, QColor(priCol.red(), priCol.green(), priCol.blue(), int(120 * m_currentScale)));
     atmosphere.setColorAt(1.0, Qt::transparent);
     painter.setBrush(atmosphere);
     painter.setPen(Qt::NoPen);
@@ -575,8 +590,8 @@ void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, i
     // ۲. کره جامد هسته کوانتومی
     QRadialGradient planetGrad(QPointF(cx, cy), radius, QPointF(cx - radius*0.35, cy - radius*0.35));
     planetGrad.setColorAt(0.0, Qt::white);      
-    planetGrad.setColorAt(0.15, QColor(0, 200, 255));      
-    planetGrad.setColorAt(0.55, QColor(10, 30, 60));         
+    planetGrad.setColorAt(0.15, priCol);      
+    planetGrad.setColorAt(0.55, QColor(priCol.red()/6, priCol.green()/6, priCol.blue()/6));         
     planetGrad.setColorAt(1.0, QColor(2, 4, 8));           
     painter.setBrush(planetGrad);
     painter.drawEllipse(QPointF(cx, cy), radius, radius);
@@ -590,7 +605,7 @@ void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, i
     painter.save();
     painter.rotate(m_time * 35.0);
     painter.scale(1.0, 0.35);
-    painter.setPen(QPen(QColor(0, 242, 254, int(180 * m_currentScale)), 2.5));
+    painter.setPen(QPen(QColor(priCol.red(), priCol.green(), priCol.blue(), int(180 * m_currentScale)), 2.5));
     painter.drawEllipse(QPointF(0,0), radius*1.15, radius*1.15);
     painter.restore();
     
@@ -598,7 +613,7 @@ void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, i
     painter.save();
     painter.rotate(-m_time * 45.0);
     painter.scale(0.35, 1.0);
-    painter.setPen(QPen(QColor(255, 51, 102, int(180 * m_currentScale)), 2.5));
+    painter.setPen(QPen(QColor(secCol.red(), secCol.green(), secCol.blue(), int(180 * m_currentScale)), 2.5));
     painter.drawEllipse(QPointF(0,0), radius*1.2, radius*1.2);
     painter.restore();
 
@@ -606,7 +621,7 @@ void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, i
     painter.save();
     painter.rotate(m_time * 25.0 + 45.0);
     painter.scale(0.7, 0.7);
-    painter.setPen(QPen(QColor(51, 255, 153, int(160 * m_currentScale)), 2.0, Qt::DashLine));
+    painter.setPen(QPen(QColor(255, 255, 255, int(160 * m_currentScale)), 2.0, Qt::DashLine));
     painter.drawEllipse(QPointF(0,0), radius*1.3, radius*1.3);
     painter.restore();
 
@@ -614,8 +629,9 @@ void AdvancedSettingsWidget::drawCentralQuantumCore(QPainter& painter, int cx, i
 }
 
 void AdvancedSettingsWidget::drawHUDTelemetry(QPainter& painter) {
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
     painter.setFont(QFont("Consolas", 10, QFont::Bold));
-    painter.setPen(QColor(0, 242, 254, 180));
+    painter.setPen(priCol);
 
     // گوشه بالا راست
     int rx = width() - 250;
@@ -660,8 +676,10 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
     qreal groundY = height() - 100;
     qreal startX = 260;
     qreal endX = width() - 100;
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+    QColor secCol = ThemeManager::instance().getSecondaryColor();
 
-    painter.setPen(QColor(0, 242, 254));
+    painter.setPen(priCol);
     painter.setFont(QFont("Consolas", 26, QFont::Bold));
     painter.drawText(QRectF(0, height()/2 - 60, width(), 50), Qt::AlignCenter, QString("VOLUME: %1%").arg(m_volume));
 
@@ -671,12 +689,12 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
     
     // امواج صوتی اطراف کریستال
     qreal soundPulse = std::fmod(m_time * 40.0, 70.0);
-    painter.setPen(QPen(QColor(255, 51, 200, int(255 * (1.0 - soundPulse/70.0))), 2.0));
+    painter.setPen(QPen(QColor(secCol.red(), secCol.green(), secCol.blue(), int(255 * (1.0 - soundPulse/70.0))), 2.0));
     painter.setBrush(Qt::NoBrush);
     painter.drawEllipse(orbPos, soundPulse, soundPulse);
 
     QRadialGradient trackGlow(orbPos, 70.0);
-    trackGlow.setColorAt(0.0, QColor(255, 51, 200, 160));
+    trackGlow.setColorAt(0.0, QColor(secCol.red(), secCol.green(), secCol.blue(), 160));
     trackGlow.setColorAt(1.0, Qt::transparent);
     painter.setPen(Qt::NoPen);
     painter.setBrush(trackGlow);
@@ -691,7 +709,7 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
     QPointF mid2 = orbPos + QPointF(std::cos(rot + M_PI)*crW, std::sin(rot + M_PI)*8.0);
 
     painter.setPen(QPen(Qt::white, 2));
-    painter.setBrush(QColor(255, 51, 200, 220));
+    painter.setBrush(QColor(secCol.red(), secCol.green(), secCol.blue(), 220));
     crystalTop << topP << mid1 << mid2;
     painter.drawPolygon(crystalTop);
     crystalBottom << botP << mid1 << mid2;
@@ -707,14 +725,14 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
         QPointF simPos = m_cannonBase;
         QPointF simVel = vel;
         
-        painter.setPen(QPen(QColor(0, 242, 254, 180), 2.0, Qt::DotLine));
+        painter.setPen(QPen(QColor(priCol.red(), priCol.green(), priCol.blue(), 180), 2.0, Qt::DotLine));
         for (int step = 0; step < 40; ++step) {
             QPointF nextPos = simPos + simVel;
             simVel.setY(simVel.y() + 0.6);
             painter.drawLine(simPos, nextPos);
             simPos = nextPos;
             if (simPos.y() >= groundY) {
-                painter.setBrush(QColor(0, 242, 254, 150));
+                painter.setBrush(QColor(priCol.red(), priCol.green(), priCol.blue(), 150));
                 painter.drawEllipse(simPos, 6, 6);
                 break;
             }
@@ -728,12 +746,12 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
         qreal tx = startX + (i / 100.0) * (endX - startX);
         painter.setPen(QPen(QColor(255, 255, 255, 150), 2));
         painter.drawLine(QPointF(tx, groundY - 10), QPointF(tx, groundY + 10));
-        painter.setPen((i <= m_volume) ? QColor(0, 242, 254) : QColor(255, 255, 255, 100));
+        painter.setPen((i <= m_volume) ? priCol : QColor(255, 255, 255, 100));
         painter.setFont(QFont("Consolas", 11, QFont::Bold));
         painter.drawText(QRectF(tx - 25, groundY + 15, 50, 20), Qt::AlignCenter, QString::number(i));
     }
     qreal curX = startX + (m_volume / 100.0) * (endX - startX);
-    painter.setPen(QPen(QColor(0, 242, 254, 200), 5));
+    painter.setPen(QPen(QColor(priCol.red(), priCol.green(), priCol.blue(), 200), 5));
     painter.drawLine(QPointF(startX, groundY), QPointF(curX, groundY));
 
     // پایه و توپ پرتاب
@@ -742,14 +760,14 @@ void AdvancedSettingsWidget::renderAudioLauncher(QPainter& painter) {
     QPointF drawBall = m_cannonBase;
     if (m_isDraggingCannon) {
         drawBall = m_dragPos;
-        painter.setPen(QPen(QColor(255, 51, 102, 220), 4));
+        painter.setPen(QPen(QColor(secCol.red(), secCol.green(), secCol.blue(), 220), 4));
         painter.drawLine(m_cannonBase, m_dragPos);
     } else if (m_audioBallFlying) drawBall = m_audioBallPos;
 
     QRadialGradient bg(drawBall, 20.0, drawBall - QPointF(5,5));
     bg.setColorAt(0, Qt::white); 
-    bg.setColorAt(0.3, QColor(0, 242, 254)); 
-    bg.setColorAt(1, QColor(0, 40, 80));
+    bg.setColorAt(0.3, priCol); 
+    bg.setColorAt(1, QColor(priCol.red()/4, priCol.green()/4, priCol.blue()/4));
     painter.setPen(Qt::NoPen); 
     painter.setBrush(bg);
     painter.drawEllipse(drawBall, 20.0, 20.0);

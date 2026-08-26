@@ -1,4 +1,5 @@
 #include "StartGameWidget.h"
+#include "ThemeManager.h"
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
@@ -251,25 +252,37 @@ void StartGameWidget::paintEvent(QPaintEvent* event) {
 }
 
 void StartGameWidget::drawCosmicNebula(QPainter& painter) {
-    painter.fillRect(rect(), QColor(2, 4, 8)); // تیره و عمیق
+    int baseHue = ThemeManager::instance().getBaseHue();
+    QColor bgTop = QColor::fromHsv(baseHue, 220, 16);
+    QColor bgBottom = QColor::fromHsv(baseHue, 240, 6);
+    
+    QLinearGradient bgGrad(0, 0, 0, height());
+    bgGrad.setColorAt(0.0, bgTop);
+    bgGrad.setColorAt(1.0, bgBottom);
+    painter.fillRect(rect(), bgGrad);
 
-    // سحابی بنفش/ارغوانی بالا راست
+    // سحابی با رنگ‌های تم
     QRadialGradient neb1(width()*0.8, height()*0.2, 900);
-    neb1.setColorAt(0, QColor(90, 20, 180, 50));
-    neb1.setColorAt(0.5, QColor(160, 32, 240, 20));
+    QColor nC1 = ThemeManager::instance().getSecondaryColor();
+    nC1.setAlpha(45);
+    neb1.setColorAt(0, nC1);
     neb1.setColorAt(1, Qt::transparent);
     painter.fillRect(rect(), neb1);
     
-    // سحابی آبی فیروزه‌ای پایین چپ
     QRadialGradient neb2(width()*0.2, height()*0.8, 1000);
-    neb2.setColorAt(0, QColor(0, 150, 255, 45));
-    neb2.setColorAt(0.5, QColor(0, 242, 254, 15));
+    QColor nC2 = ThemeManager::instance().getPrimaryColor();
+    nC2.setAlpha(35);
+    neb2.setColorAt(0, nC2);
     neb2.setColorAt(1, Qt::transparent);
     painter.fillRect(rect(), neb2);
 
-    for (auto& star : m_stars) {
+    for (int i = 0; i < m_stars.size(); ++i) {
+        auto& star = m_stars[i];
         qreal currentBright = (std::sin(m_time * star.speed + star.phase) + 1.0) / 2.0;
-        QColor c = star.color;
+        QColor c;
+        if (i % 3 == 0) c = ThemeManager::instance().getPrimaryColor();
+        else if (i % 3 == 1) c = ThemeManager::instance().getSecondaryColor();
+        else c = Qt::white;
         c.setAlpha(int(currentBright * 220 + 35));
         painter.setPen(Qt::NoPen);
         painter.setBrush(c);
@@ -281,7 +294,7 @@ void StartGameWidget::drawAtmosphere(QPainter& painter) {
     qreal cx = width() / 2.0;
     qreal cy = height() / 2.0;
     
-    QColor atmosColor = QColor(0, 242, 254);
+    QColor atmosColor = ThemeManager::instance().getPrimaryColor();
     if (m_lockedSector != -1) {
         atmosColor = m_sectors[m_lockedSector].color;
     }
@@ -336,6 +349,8 @@ void StartGameWidget::drawGeodesicGlobe(QPainter& painter) {
         return a.c.z < b.c.z;
     });
 
+    QColor priColor = ThemeManager::instance().getPrimaryColor();
+
     for (const auto& f : faces) {
         // Culling بسیار دور یا نقاط نامعتبر
         if (f.c.z < -m_globeRadius * 0.9) continue;
@@ -361,7 +376,7 @@ void StartGameWidget::drawGeodesicGlobe(QPainter& painter) {
         }
         lineAlpha = std::clamp(lineAlpha, 5, 255);
 
-        painter.setPen(QPen(QColor(0, 242, 254, lineAlpha), isFront ? 1.0 : 0.5));
+        painter.setPen(QPen(QColor(priColor.red(), priColor.green(), priColor.blue(), lineAlpha), isFront ? 1.0 : 0.5));
         
         // اگر قاره است، داخلش را با افکت نئونی رنگ کن
         if (f.isContinent) {
@@ -369,7 +384,7 @@ void StartGameWidget::drawGeodesicGlobe(QPainter& painter) {
             if (isFront && std::abs(f.c.y - pulsePhase) < 30.0) fillAlpha += 80;
             fillAlpha = std::clamp(fillAlpha, 0, 200);
             
-            painter.setBrush(QColor(0, 242, 254, fillAlpha));
+            painter.setBrush(QColor(priColor.red(), priColor.green(), priColor.blue(), fillAlpha));
         } else {
             painter.setBrush(Qt::NoBrush);
         }
@@ -604,8 +619,10 @@ void StartGameWidget::drawCyberpunkHUD(QPainter& painter) {
     font.setLetterSpacing(QFont::AbsoluteSpacing, 1.5);
     painter.setFont(font);
     
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+
     // اطلاعات تلماتری (گوشه بالا چپ)
-    painter.setPen(QColor(0, 242, 254, 200));
+    painter.setPen(priCol);
     painter.drawText(30, 40, "[ TELEMETRY // ORBITAL LINK ]");
     
     painter.setPen(Qt::white);
@@ -614,7 +631,9 @@ void StartGameWidget::drawCyberpunkHUD(QPainter& painter) {
     painter.drawText(30, 105, QString("SYNC RATE: %1 THz").arg(14.32 + std::sin(m_time)*0.1, 5, 'f', 2));
     
     // خطوط گرافیکی دور HUD
-    painter.setPen(QPen(QColor(0, 242, 254, 100), 2.0));
+    QColor lineCol = priCol;
+    lineCol.setAlpha(100);
+    painter.setPen(QPen(lineCol, 2.0));
     painter.drawLine(20, 25, 20, 120);
     painter.drawLine(20, 25, 50, 25);
     painter.drawLine(20, 120, 50, 120);
@@ -624,13 +643,13 @@ void StartGameWidget::drawCyberpunkHUD(QPainter& painter) {
     if (m_dockingProgress == 1.0) sysStatus = "SYSTEM LOCKED & READY";
     
     int tx = width() - 280;
-    painter.setPen(QColor(0, 242, 254, 200));
+    painter.setPen(priCol);
     painter.drawText(tx, 40, "[ MISSION STATUS ]");
     
     painter.setPen((m_lockedSector != -1) ? QColor(255, 60, 60) : Qt::white);
     painter.drawText(tx, 65, sysStatus);
     
-    painter.setPen(QPen(QColor(0, 242, 254, 100), 2.0));
+    painter.setPen(QPen(lineCol, 2.0));
     painter.drawLine(width() - 20, 25, width() - 20, 120);
     painter.drawLine(width() - 20, 25, width() - 50, 25);
     painter.drawLine(width() - 20, 120, width() - 50, 120);
@@ -654,10 +673,14 @@ void StartGameWidget::drawFloatingUI(QPainter& painter) {
     qreal cx = width() / 2.0;
     qreal cy = height() / 2.0;
 
+    QColor priCol = ThemeManager::instance().getPrimaryColor();
+
     // خط اتصال از کره به Name Input
-    painter.setPen(QPen(QColor(0, 242, 254, 150), 1.5, Qt::DashLine));
+    QColor dashCol = priCol;
+    dashCol.setAlpha(150);
+    painter.setPen(QPen(dashCol, 1.5, Qt::DashLine));
     painter.drawLine(QPointF(cx, cy - m_globeRadius), QPointF(cx, 95));
-    painter.setBrush(QColor(0, 242, 254));
+    painter.setBrush(priCol);
     painter.drawEllipse(QPointF(cx, cy - m_globeRadius), 4, 4);
     painter.drawEllipse(QPointF(cx, 95), 4, 4);
 
