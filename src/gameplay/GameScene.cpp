@@ -163,7 +163,7 @@ void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
 
     QPointF pos = event->scenePos();
 
-    // ۱. کلیک روی نودهای ماهواره‌ای بالا
+    // ۱. کنترل نودهای ماهواره‌ای بالا
     for (const auto& node : m_satelliteNodes) {
         if (std::hypot(pos.x() - node.center.x(), pos.y() - node.center.y()) <= node.radius) {
             SoundManager::instance().playPop();
@@ -174,60 +174,39 @@ void GameScene::mousePressEvent(QGraphicsSceneMouseEvent* event) {
         }
     }
 
-    // ۲. جابجایی سریع با کلیک راست
+    // ۲. جابجایی تیر با کلیک راست (در صورت فعال بودن مهارت، اول لغو شود)
     if (event->button() == Qt::RightButton) {
-        m_cannon->swapBalls();
+        if (m_armedSkillIndex != -1) {
+            disarmSkill();
+        } else {
+            m_cannon->swapBalls();
+        }
         SoundManager::instance().playPop();
         return;
     }
 
     if (event->button() == Qt::LeftButton) {
-        // ۳. انتخاب مهارت از داک افقی زیر توپ
-        for (auto& pod : m_skillPods) {
-            if (pod.rect.contains(pos)) {
-                if (pod.count > 0) {
-                    pod.count--;
-                    if (pod.type == BallType::DualColor) {
-                        auto rem = m_grid.getRemainingColors();
-                        BallColor c1 = BallColor::Red;
-                        BallColor c2 = BallColor::Blue;
-
-                        if (rem.size() >= 2) {
-                            int idx1 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size()));
-                            int idx2 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size() - 1));
-                            if (idx2 >= idx1) idx2++;
-                            c1 = rem[idx1];
-                            c2 = rem[idx2];
-                        } else if (rem.size() == 1) {
-                            c1 = rem[0];
-                            c2 = (c1 == BallColor::Red) ? BallColor::Blue : BallColor::Red;
-                        } else {
-                            c1 = Ball::getRandomColor(5);
-                            do { c2 = Ball::getRandomColor(5); } while (c2 == c1);
-                        }
-                        m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
-                    } else {
-                        BallColor activeCol = (pod.type == BallType::Rainbow) ? BallColor::None : m_cannon->getCurrentColor();
-                        m_cannon->setCurrentBall(activeCol, pod.type);
-                        m_loadedSecondaryColor = BallColor::None;
-                    }
-                    SoundManager::instance().playShoot();
-                    spawnPopParticles(pod.rect.center(), pod.color, 15);
-                    update();
-                }
+        // ۳. مسلح‌سازی مهارت‌ها از داک پایین با کلیک ماوس
+        for (int i = 0; i < m_skillPods.size(); ++i) {
+            if (m_skillPods[i].rect.contains(pos)) {
+                armSkill(i);
                 return;
             }
         }
 
-        // ۴. بررسی کلیک روی گوی ذخیره کانن
+        // ۴. کلیک روی توپ رزرو کانن
         QPointF cannonLocal = m_cannon->mapFromScene(pos);
         if (std::hypot(cannonLocal.x() - (-65.0), cannonLocal.y() - 0.0) <= 28.0) {
-            m_cannon->swapBalls();
+            if (m_armedSkillIndex != -1) {
+                disarmSkill();
+            } else {
+                m_cannon->swapBalls();
+            }
             SoundManager::instance().playPop();
             return;
         }
 
-        // ۵. شلیک در محفظه شلیک
+        // ۵. شلیک در میدان نبرد
         if (pos.x() >= PLAYFIELD_X && pos.x() <= PLAYFIELD_X + PLAYFIELD_W && pos.y() < 630.0) {
             fireBall();
         }
@@ -241,24 +220,17 @@ void GameScene::keyPressEvent(QKeyEvent* event) {
         emit pauseRequested();
     } else if (event->key() == Qt::Key_Space) {
         if (!m_isFlying) {
-            m_cannon->swapBalls();
+            if (m_armedSkillIndex != -1) {
+                disarmSkill();
+            } else {
+                m_cannon->swapBalls();
+            }
+            SoundManager::instance().playPop();
         }
     } else if (event->key() >= Qt::Key_1 && event->key() <= Qt::Key_4) {
+        // مسلح‌سازی با کلیدهای عددی ۱ تا ۴
         int idx = event->key() - Qt::Key_1;
-        if (idx >= 0 && idx < m_skillPods.size() && m_skillPods[idx].count > 0) {
-            m_skillPods[idx].count--;
-            if (m_skillPods[idx].type == BallType::DualColor) {
-                auto rem = m_grid.getRemainingColors();
-                BallColor c1 = rem.empty() ? BallColor::Red : rem[0];
-                BallColor c2 = (rem.size() > 1) ? rem[1] : BallColor::Blue;
-                m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
-            } else {
-                BallColor activeCol = (m_skillPods[idx].type == BallType::Rainbow) ? BallColor::None : m_cannon->getCurrentColor();
-                m_cannon->setCurrentBall(activeCol, m_skillPods[idx].type);
-            }
-            SoundManager::instance().playShoot();
-            update();
-        }
+        armSkill(idx);
     }
     QGraphicsScene::keyPressEvent(event);
 }
@@ -272,6 +244,15 @@ void GameScene::fireBall() {
     m_flyingType = m_cannon->getCurrentType();
     m_flyingSecondaryColor = m_cannon->getCurrentSecondaryColor();
     m_flyingPos = m_cannon->pos();
+
+    // ===> کسر مهمات مهارت فقط در لحظه شلیک واقعی <===
+    if (m_armedSkillIndex != -1) {
+        if (m_skillPods[m_armedSkillIndex].count > 0) {
+            m_skillPods[m_armedSkillIndex].count--;
+        }
+        m_armedSkillIndex = -1;
+        m_savedBaseColor = BallColor::None;
+    }
 
     qreal rad = m_cannon->getAngle() * M_PI / 180.0;
     qreal speed = 16.0;
@@ -821,18 +802,23 @@ void GameScene::drawSatelliteControls(QPainter* painter) {
 }
 
 void GameScene::drawOrbitalSkillPods(QPainter* painter) {
-    // کادر نگهدارنده داک افقی سلاح‌ها
     QRectF dockFrame(PLAYFIELD_X, 630.0, PLAYFIELD_W, 62.0);
     painter->setBrush(QColor(10, 16, 28, 230));
     painter->setPen(QPen(QColor(0, 242, 254, 80), 1.5));
     painter->drawRoundedRect(dockFrame, 8, 8);
 
-    for (const auto& pod : m_skillPods) {
+    for (int i = 0; i < m_skillPods.size(); ++i) {
+        const auto& pod = m_skillPods[i];
         bool available = pod.count > 0;
+        bool isArmed = (m_armedSkillIndex == i);
 
-        QColor borderColor = available ? pod.color : QColor(60, 70, 85);
-        painter->setPen(QPen(borderColor, 1.5));
-        painter->setBrush(available ? QColor(pod.color.red(), pod.color.green(), pod.color.blue(), 25) : QColor(15, 20, 30, 150));
+        QColor borderColor = isArmed ? QColor(255, 255, 255) : (available ? pod.color : QColor(60, 70, 85));
+        qreal borderWidth = isArmed ? 2.5 : 1.5;
+
+        // پس‌زمینه درخشان‌تر در صورت مسلح بودن
+        int bgAlpha = isArmed ? int(60 + 30 * std::sin(m_time * 8.0)) : (available ? 25 : 10);
+        painter->setPen(QPen(borderColor, borderWidth));
+        painter->setBrush(available ? QColor(pod.color.red(), pod.color.green(), pod.color.blue(), bgAlpha) : QColor(15, 20, 30, 150));
         painter->drawRoundedRect(pod.rect, 6, 6);
 
         // آیکون دایره‌ای
@@ -840,23 +826,88 @@ void GameScene::drawOrbitalSkillPods(QPainter* painter) {
         painter->setBrush(available ? pod.color : QColor(60, 70, 85));
         painter->drawEllipse(pod.rect.left() + 8, pod.rect.top() + 11, 26, 26);
 
-        // عنوان و کلید سریع
-        painter->setPen(available ? Qt::white : QColor(120, 130, 145));
+        // عنوان
+        painter->setPen(isArmed ? QColor(0, 242, 254) : (available ? Qt::white : QColor(120, 130, 145)));
         painter->setFont(QFont("Consolas", 9, QFont::Bold));
         painter->drawText(QRectF(pod.rect.left() + 38, pod.rect.top() + 7, 75, 18), pod.name);
 
-        painter->setPen(QColor(148, 163, 184));
-        painter->setFont(QFont("Consolas", 7));
-        painter->drawText(QRectF(pod.rect.left() + 38, pod.rect.top() + 26, 75, 16), QString("KEY %1").arg(pod.hotkey));
+        // کلید سریع یا وضعیت ARMED
+        painter->setPen(isArmed ? QColor(255, 204, 0) : QColor(148, 163, 184));
+        painter->setFont(QFont("Consolas", 7, isArmed ? QFont::Bold : QFont::Normal));
+        QString subText = isArmed ? "● ARMED" : QString("KEY %1").arg(pod.hotkey);
+        painter->drawText(QRectF(pod.rect.left() + 38, pod.rect.top() + 26, 75, 16), subText);
 
         // شمارنده باقیمانده
         QRectF countBadge(pod.rect.right() - 20, pod.rect.top() + 6, 16, 16);
-        painter->setBrush(available ? QColor(0, 242, 254) : QColor(80, 90, 100));
+        painter->setBrush(isArmed ? QColor(255, 204, 0) : (available ? QColor(0, 242, 254) : QColor(80, 90, 100)));
         painter->drawRoundedRect(countBadge, 3, 3);
 
         painter->setPen(Qt::black);
         painter->setFont(QFont("Consolas", 8, QFont::Bold));
         painter->drawText(countBadge, Qt::AlignCenter, QString::number(pod.count));
+    }
+}
+
+void GameScene::armSkill(int podIndex) {
+    if (podIndex < 0 || podIndex >= m_skillPods.size()) return;
+
+    // ۱. اگر همین مهارت در حال حاضر مسلح است، با کلیک مجدد لغو شود (Toggle Off)
+    if (m_armedSkillIndex == podIndex) {
+        disarmSkill();
+        SoundManager::instance().playPop();
+        update();
+        return;
+    }
+
+    // ۲. بررسی داشتن موجودی کافی
+    if (m_skillPods[podIndex].count <= 0) return;
+
+    // ۳. اگر قبلاً مهارتی مسلح نبوده، رنگ توپ عادی فعلی ذخیره شود
+    if (m_armedSkillIndex == -1) {
+        m_savedBaseColor = m_cannon->getCurrentColor();
+    }
+
+    m_armedSkillIndex = podIndex;
+    const auto& pod = m_skillPods[podIndex];
+
+    // ۴. لود کردن مهارت در کانن بدون کسر کردن count
+    if (pod.type == BallType::DualColor) {
+        auto rem = m_grid.getRemainingColors();
+        BallColor c1 = BallColor::Red;
+        BallColor c2 = BallColor::Blue;
+
+        if (rem.size() >= 2) {
+            int idx1 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size()));
+            int idx2 = QRandomGenerator::global()->bounded(static_cast<int>(rem.size() - 1));
+            if (idx2 >= idx1) idx2++;
+            c1 = rem[idx1];
+            c2 = rem[idx2];
+        } else if (rem.size() == 1) {
+            c1 = rem[0];
+            c2 = (c1 == BallColor::Red) ? BallColor::Blue : BallColor::Red;
+        } else {
+            c1 = Ball::getRandomColor(5);
+            do { c2 = Ball::getRandomColor(5); } while (c2 == c1);
+        }
+        m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
+    } else {
+        BallColor activeCol = (pod.type == BallType::Rainbow) ? BallColor::None :
+                              (m_savedBaseColor != BallColor::None ? m_savedBaseColor : m_cannon->getCurrentColor());
+        m_cannon->setCurrentBall(activeCol, pod.type);
+        m_loadedSecondaryColor = BallColor::None;
+    }
+
+    SoundManager::instance().playShoot();
+    spawnPopParticles(pod.rect.center(), pod.color, 12);
+    update();
+}
+
+void GameScene::disarmSkill() {
+    if (m_armedSkillIndex != -1) {
+        BallColor restoreCol = (m_savedBaseColor != BallColor::None) ? m_savedBaseColor : BallColor::Red;
+        m_cannon->setCurrentBall(restoreCol, BallType::Regular);
+        m_armedSkillIndex = -1;
+        m_savedBaseColor = BallColor::None;
     }
 }
 

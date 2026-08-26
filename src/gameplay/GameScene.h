@@ -100,7 +100,10 @@ private:
     void drawTelemetryGlassHUD(QPainter* painter);
     void drawSatelliteControls(QPainter* painter);
     void drawOrbitalSkillPods(QPainter* painter);
-
+    void armSkill(int podIndex);
+    void disarmSkill();
+    int m_armedSkillIndex = -1;
+    BallColor m_savedBaseColor = BallColor::None; // رنگ توپ عادی قبل از انتخاب مهارت
     QString m_username;
     QString m_mode;
     int m_levelNumber = 1;
