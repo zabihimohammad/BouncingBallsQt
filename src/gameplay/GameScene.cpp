@@ -26,10 +26,10 @@ GameScene::~GameScene() {
 }
 
 void GameScene::initGame() {
-    m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.compare("Time", Qt::CaseInsensitive) == 0);
+    m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.contains("Time", Qt::CaseInsensitive));
     m_isEndless = (m_mode.compare("ENDLESS", Qt::CaseInsensitive) == 0 || m_mode.contains("Endless", Qt::CaseInsensitive));
 
-    m_timeRemaining = 75.0;
+    m_chronoFreezeTimer = 0.0;
     m_currentWave = 1;
     m_waveTimer = 0.0;
     m_endlessRowTimer = 0.0;
@@ -49,8 +49,42 @@ void GameScene::initGame() {
     int startRows = 5;
     bool seedHazards = false;
 
-    if (m_isEndless) {
-        if (m_difficulty == 0) { // Cadet (Easy)
+    if (m_isTimeAttack) {
+        if (m_difficulty == 0) { // Cadet
+            m_timeRemaining = 60.0;
+            m_timeDrainRate = 1.0;
+            m_maxAimBounces = 2;
+            m_baseScoreMultiplier = 1.0;
+            m_scoreMultiplier = 1.0;
+            m_activeColorsCount = 4;
+            m_clusterChance = 45;
+            startRows = 4;
+            seedHazards = false;
+        } else if (m_difficulty == 1) { // Veteran
+            m_timeRemaining = 45.0;
+            m_timeDrainRate = 1.05;
+            m_maxAimBounces = 1;
+            m_baseScoreMultiplier = 1.75;
+            m_scoreMultiplier = 1.75;
+            m_activeColorsCount = 5;
+            m_clusterChance = 25;
+            startRows = 5;
+            seedHazards = false;
+        } else { // Cyber-God
+            m_timeRemaining = 30.0;
+            m_timeDrainRate = 1.25;
+            m_maxAimBounces = 1;
+            m_baseScoreMultiplier = 3.0;
+            m_scoreMultiplier = 3.0;
+            m_activeColorsCount = 5;
+            m_clusterChance = 10;
+            startRows = 6;
+            seedHazards = true;
+        }
+        // فعال‌سازی کریستال‌های زمان و بمب‌های ساعتی
+        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards, true, true);
+    } else if (m_isEndless) {
+        if (m_difficulty == 0) {
             m_currentDropInterval = 16.0;
             m_maxMissedShots = 5;
             m_maxAimBounces = 2;
@@ -60,7 +94,7 @@ void GameScene::initGame() {
             m_clusterChance = 50;
             startRows = 4;
             seedHazards = false;
-        } else if (m_difficulty == 1) { // Veteran (Normal)
+        } else if (m_difficulty == 1) {
             m_currentDropInterval = 12.0;
             m_maxMissedShots = 3;
             m_maxAimBounces = 1;
@@ -70,7 +104,7 @@ void GameScene::initGame() {
             m_clusterChance = 25;
             startRows = 5;
             seedHazards = false;
-        } else { // Cyber-God (Extreme)
+        } else {
             m_currentDropInterval = 8.0;
             m_maxMissedShots = 2;
             m_maxAimBounces = 1;
@@ -81,9 +115,9 @@ void GameScene::initGame() {
             startRows = 6;
             seedHazards = true;
         }
-        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards);
+        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards, false, false);
     } else if (m_mode.compare("Random", Qt::CaseInsensitive) == 0 || m_mode.compare("CHAOS", Qt::CaseInsensitive) == 0) {
-        m_grid.generateRandomLevel(5, 5, 25, false);
+        m_grid.generateRandomLevel(5, 5, 25, false, false, false);
     } else {
         m_grid.loadLevel(m_levelNumber);
     }
@@ -241,7 +275,18 @@ void GameScene::addTimeBonus(qreal seconds, const QString& reason) {
     if (!m_isTimeAttack) return;
     m_timeRemaining += seconds;
     QPointF hudPos(PLAYFIELD_X + (PLAYFIELD_W / 2.0), 60.0);
-    spawnFloatingText(hudPos, QString("+%1s %2").arg(static_cast<int>(seconds)).arg(reason), QColor(255, 204, 0));
+    spawnFloatingText(hudPos, QString("+%1s %2").arg(seconds, 0, 'f', 1).arg(reason), QColor(255, 204, 0));
+}
+
+void GameScene::triggerChronoFreeze(const QPointF& pos, int crystalCount) {
+    if (crystalCount <= 0) return;
+    qreal addedFreeze = 4.0 + (crystalCount - 1) * 2.5;
+    m_chronoFreezeTimer += addedFreeze;
+
+    SoundManager::instance().playWin();
+    emit shakeRequested(10);
+    m_shockwaves.append({pos, 35.0, 1.0, QColor(0, 242, 254)});
+    spawnFloatingText(pos, QString("⏳ +%1s CHRONO FREEZE! (2X PTS)").arg(addedFreeze, 0, 'f', 1), QColor(0, 242, 254));
 }
 
 void GameScene::checkOverdriveTrigger(const QPointF& center) {
@@ -466,7 +511,8 @@ void GameScene::fireBall() {
     }
 
     qreal rad = m_cannon->getAngle() * M_PI / 180.0;
-    qreal baseSpeed = m_isOverdrive ? 20.0 : (m_empSurgeActive ? 22.0 : 15.0);
+    bool isHyperFever = (m_isTimeAttack && m_timeRemaining <= 10.0 && m_timeRemaining > 0.0);
+    qreal baseSpeed = m_isOverdrive ? 20.0 : (m_empSurgeActive ? 22.0 : (isHyperFever ? 23.5 : 15.0));
     m_flyingVel = QPointF(std::cos(rad) * baseSpeed, -std::sin(rad) * baseSpeed);
 
     m_flyingBallItem->setPos(m_flyingPos);
@@ -487,7 +533,7 @@ void GameScene::updateGameLoop() {
     m_displayedScore += (m_score - m_displayedScore) * 0.15;
     if (std::abs(m_score - m_displayedScore) < 0.5) m_displayedScore = m_score;
 
-    // ۱. تایمر اضطراب شلیک خودکار (Panic Clock) در سختی Cyber-God
+    // ۱. تایمر اضطراب شلیک خودکار (Panic Clock)
     if (m_isEndless && m_difficulty == 2 && !m_isFlying) {
         m_panicTimer += 0.016;
         if (m_panicTimer >= 6.0) {
@@ -534,15 +580,40 @@ void GameScene::updateGameLoop() {
         }
     }
 
-    // ۵. منطق Time Attack
+    // ۵. منطق Time Attack و مصرف زمان + تیک‌تاک بمب‌های ساعتی
     if (m_isTimeAttack) {
-        m_timeRemaining -= 0.016;
-        if (m_timeRemaining <= 0.0) {
-            m_timeRemaining = 0.0;
-            m_isPaused = true;
-            SoundManager::instance().playWin();
-            emit gameWon(m_score);
-            return;
+        // بروزرسانی شمارشگر بمب‌های ساعتی
+        auto expiredBombs = m_grid.updateChronoBombs(0.016);
+        if (!expiredBombs.empty()) {
+            for (const auto& expPos : expiredBombs) {
+                QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(expPos.first, expPos.second);
+                spawnPopParticles(pCenter, QColor(255, 51, 102), 24);
+                m_grid.removeBall(expPos.first, expPos.second);
+                m_timeRemaining = std::max(0.0, m_timeRemaining - 3.0);
+                emit shakeRequested(14);
+                SoundManager::instance().playGameOver();
+                spawnFloatingText(pCenter, "-3.0s BOMB TIMEOUT!", QColor(255, 51, 102));
+            }
+            checkFloatingBalls();
+            redrawGrid();
+            syncCannonColorsWithGrid();
+        }
+
+        if (m_chronoFreezeTimer > 0.0) {
+            m_chronoFreezeTimer -= 0.016;
+            if (m_chronoFreezeTimer <= 0.0) {
+                m_chronoFreezeTimer = 0.0;
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 80), "CHRONO RESUMED", QColor(148, 163, 184));
+            }
+        } else {
+            m_timeRemaining -= 0.016 * m_timeDrainRate;
+            if (m_timeRemaining <= 0.0) {
+                m_timeRemaining = 0.0;
+                m_isPaused = true;
+                SoundManager::instance().playWin();
+                emit gameWon(m_score);
+                return;
+            }
         }
     }
 
@@ -618,6 +689,7 @@ void GameScene::updateGameLoop() {
     m_laserBeams.erase(std::remove_if(m_laserBeams.begin(), m_laserBeams.end(),
                                       [](const LaserRayEffect& lb) { return lb.life <= 0; }), m_laserBeams.end());
 
+    // فیزیک حرکت گلوله‌ها و رفتار اختصاصی پرتو فوتونی (Photon Beam)
     if (m_isFlying) {
         m_flyingPos += m_flyingVel;
 
@@ -636,10 +708,8 @@ void GameScene::updateGameLoop() {
             spawnPopParticles(m_flyingPos, ThemeManager::instance().getPrimaryColor(), 6);
         }
 
-        bool collided = false;
-        if (m_flyingPos.y() <= GridManager::BALL_RADIUS) {
-            collided = true;
-        } else {
+        // عملکرد نفوذگر پرتو فوتونی (Piercing Photon Beam)
+        if (m_flyingType == BallType::PhotonBeam) {
             QPointF localGridPos(m_flyingPos.x() - PLAYFIELD_X, m_flyingPos.y());
             for (int r = 0; r < GridManager::ROWS; ++r) {
                 int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
@@ -647,24 +717,61 @@ void GameScene::updateGameLoop() {
                     if (m_grid.isOccupied(r, c)) {
                         QPointF center = m_grid.getCenterPos(r, c);
                         qreal dist = std::hypot(center.x() - localGridPos.x(), center.y() - localGridPos.y());
-                        if (dist <= GridManager::BALL_DIAMETER * 0.88) {
-                            collided = true;
-                            break;
+                        if (dist <= GridManager::BALL_DIAMETER * 0.8) {
+                            QPointF worldCenter = QPointF(PLAYFIELD_X, 0) + center;
+                            spawnPopParticles(worldCenter, QColor(0, 242, 254), 14);
+                            m_grid.removeBall(r, c);
+                            m_score += static_cast<int>(25 * m_scoreMultiplier);
+                            if (m_isTimeAttack) addTimeBonus(0.4, "PHOTON!");
                         }
                     }
                 }
-                if (collided) break;
+            }
+
+            if (m_flyingPos.y() <= GridManager::BALL_RADIUS) {
+                m_isFlying = false;
+                m_flyingBallItem->setVisible(false);
+                SoundManager::instance().playWin();
+                emit shakeRequested(10);
+                checkFloatingBalls();
+                redrawGrid();
+                syncCannonColorsWithGrid();
+            } else {
+                m_flyingBallItem->setPos(m_flyingPos);
             }
         }
+            // عملکرد عادی شلیک سایر توپ‌ها
+        else {
+            bool collided = false;
+            if (m_flyingPos.y() <= GridManager::BALL_RADIUS) {
+                collided = true;
+            } else {
+                QPointF localGridPos(m_flyingPos.x() - PLAYFIELD_X, m_flyingPos.y());
+                for (int r = 0; r < GridManager::ROWS; ++r) {
+                    int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+                    for (int c = 0; c < cols; ++c) {
+                        if (m_grid.isOccupied(r, c)) {
+                            QPointF center = m_grid.getCenterPos(r, c);
+                            qreal dist = std::hypot(center.x() - localGridPos.x(), center.y() - localGridPos.y());
+                            if (dist <= GridManager::BALL_DIAMETER * 0.88) {
+                                collided = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (collided) break;
+                }
+            }
 
-        if (collided) {
-            m_isFlying = false;
-            m_flyingBallItem->setVisible(false);
-            m_trail.clear();
-            QPointF localHitPos(m_flyingPos.x() - PLAYFIELD_X, m_flyingPos.y());
-            snapBallToGrid(localHitPos, m_flyingColor, m_flyingType);
-        } else {
-            m_flyingBallItem->setPos(m_flyingPos);
+            if (collided) {
+                m_isFlying = false;
+                m_flyingBallItem->setVisible(false);
+                m_trail.clear();
+                QPointF localHitPos(m_flyingPos.x() - PLAYFIELD_X, m_flyingPos.y());
+                snapBallToGrid(localHitPos, m_flyingColor, m_flyingType);
+            } else {
+                m_flyingBallItem->setPos(m_flyingPos);
+            }
         }
     }
 
@@ -712,6 +819,8 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
         QPointF worldCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
         bool hitSuccessful = false;
 
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
+
         if (m_isEndless && m_emergencyPurgeReady && r <= 1) {
             executeEmergencyPurge(worldCenter);
             return;
@@ -719,29 +828,40 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
 
         if (type == BallType::Bomb) {
             auto exploded = m_grid.explodeBomb(r, c);
+            int crystalCount = 0;
+
             for (const auto& p : exploded) {
                 QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
                 spawnPopParticles(pCenter, QColor(231, 76, 60), 20);
 
                 Ball* b = m_grid.getBall(p.first, p.second);
-                if (b && b->hasContainedSkill()) {
-                    addSkillAmmo(b->getContainedSkill());
+                if (b) {
+                    if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                    if (b->isTimeCrystal()) crystalCount++;
+                    if (b->isChronoBomb()) addTimeBonus(b->getChronoBombTimer(), "DEFUSED!");
                 }
 
                 m_grid.removeBall(p.first, p.second);
-                m_score += static_cast<int>(30 * m_scoreMultiplier);
+                m_score += static_cast<int>(30 * activeScoreMult);
             }
+
+            if (crystalCount > 0) {
+                triggerChronoFreeze(worldCenter, crystalCount);
+            }
+
             m_shockwaves.append({worldCenter, 25.0, 1.0, QColor(231, 76, 60)});
             emit shakeRequested(12);
             spawnFloatingText(worldCenter, "+BOOM 3x3!", QColor(231, 76, 60));
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
-            addTimeBonus(3.0, "BOOM!");
+            addTimeBonus(2.5, "BOOM!");
             m_grid.damageNeighbors(r, c, true);
             hitSuccessful = true;
         } else if (type == BallType::Laser) {
             int targetRow = r - 1;
+            int crystalCount = 0;
+
             if (targetRow >= 0) {
                 triggerLaserBeamEffect(targetRow);
                 int cols = (targetRow % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
@@ -751,22 +871,29 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                         spawnPopParticles(pCenter, ThemeManager::instance().getPrimaryColor(), 16);
 
                         Ball* b = m_grid.getBall(targetRow, colIdx);
-                        if (b && b->hasContainedSkill()) {
-                            addSkillAmmo(b->getContainedSkill());
+                        if (b) {
+                            if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                            if (b->isTimeCrystal()) crystalCount++;
+                            if (b->isChronoBomb()) addTimeBonus(b->getChronoBombTimer(), "DEFUSED!");
                         }
 
                         m_grid.removeBall(targetRow, colIdx);
-                        m_score += static_cast<int>(25 * m_scoreMultiplier);
+                        m_score += static_cast<int>(25 * activeScoreMult);
                     }
                 }
                 spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, targetRow * 38.0 + 20.0),
                                   "LASER CLEARED!", ThemeManager::instance().getPrimaryColor());
             }
+
+            if (crystalCount > 0) {
+                triggerChronoFreeze(worldCenter, crystalCount);
+            }
+
             m_grid.removeBall(r, c);
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
-            addTimeBonus(3.0, "LASER!");
+            addTimeBonus(2.5, "LASER!");
             hitSuccessful = true;
         } else if (type == BallType::Rainbow) {
             std::set<BallColor> touchedColors;
@@ -794,14 +921,17 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             }
 
             int count = 0;
+            int crystalCount = 0;
             for (const auto& p : totalMatches) {
                 if (m_grid.isOccupied(p.first, p.second)) {
                     QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
                     spawnPopParticles(pCenter, QColor(255, 204, 0), 16);
 
                     Ball* b = m_grid.getBall(p.first, p.second);
-                    if (b && b->hasContainedSkill()) {
-                        addSkillAmmo(b->getContainedSkill());
+                    if (b) {
+                        if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                        if (b->isTimeCrystal()) crystalCount++;
+                        if (b->isChronoBomb()) addTimeBonus(b->getChronoBombTimer(), "DEFUSED!");
                     }
 
                     m_grid.removeBall(p.first, p.second);
@@ -809,17 +939,33 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 }
             }
 
-            int pts = static_cast<int>(count * 35 * m_scoreMultiplier);
+            if (crystalCount > 0) {
+                triggerChronoFreeze(worldCenter, crystalCount);
+            }
+
+            int pts = static_cast<int>(count * 35 * activeScoreMult);
             m_score += pts;
             m_shockwaves.append({worldCenter, 20.0, 1.0, QColor(255, 204, 0)});
             spawnFloatingText(worldCenter, QString("+%1 RAINBOW CASCADE!").arg(pts), QColor(255, 204, 0));
             SoundManager::instance().playPop();
             m_shotsHit++;
             m_comboStreak++;
-            addTimeBonus(4.0, "CASCADE!");
+            addTimeBonus(3.5, "CASCADE!");
             hitSuccessful = true;
         } else {
             hitSuccessful = popMatches(r, c, color, type, m_flyingSecondaryColor);
+        }
+
+        // شارژ پرتو فوتونی با ۳ شلیک موفق متوالی در Time Attack
+        if (m_isTimeAttack) {
+            if (hitSuccessful) {
+                if (m_comboStreak % 3 == 0) {
+                    m_cannon->setCurrentBall(BallColor::None, BallType::PhotonBeam);
+                    SoundManager::instance().playWin();
+                    emit shakeRequested(8);
+                    spawnFloatingText(m_cannon->pos() - QPointF(0, 45), "⚡ PHOTON BEAM CHARGED! ⚡", QColor(0, 242, 254));
+                }
+            }
         }
 
         if (m_comboStreak >= 5) {
@@ -849,7 +995,17 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playGameOver();
             emit gameOver(m_score);
         } else if (m_grid.isCleared()) {
-            if (m_isEndless) {
+            if (m_isTimeAttack) {
+                m_score += static_cast<int>(500 * activeScoreMult);
+                emit scoreChanged(m_score);
+                SoundManager::instance().playWin();
+                addTimeBonus(10.0, "BOARD PURGED!");
+                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2), true, true);
+                redrawGrid();
+                syncCannonColorsWithGrid();
+                emit shakeRequested(15);
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 180), "★ BOARD PURGED! +10s BONUS! ★", QColor(0, 242, 254));
+            } else if (m_isEndless) {
                 m_score += static_cast<int>(500 * m_scoreMultiplier);
                 emit scoreChanged(m_score);
                 SoundManager::instance().playWin();
@@ -861,7 +1017,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 m_endlessRowTimer = 0.0;
                 m_missedShotsCount = 0;
 
-                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2));
+                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2), false, false);
                 redrawGrid();
                 syncCannonColorsWithGrid();
 
@@ -889,11 +1045,18 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
 
         int comboBonus = m_comboStreak * 10;
         int totalGained = 0;
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
 
         bool keyPopped = false;
+        int crystalCount = 0;
+
         for (const auto& p : matches) {
             Ball* b = m_grid.getBall(p.first, p.second);
-            if (b && b->isKey()) keyPopped = true;
+            if (b) {
+                if (b->isKey()) keyPopped = true;
+                if (b->isTimeCrystal()) crystalCount++;
+                if (b->isChronoBomb()) addTimeBonus(b->getChronoBombTimer(), "DEFUSED!");
+            }
         }
 
         for (const auto& p : matches) {
@@ -910,12 +1073,28 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
             }
 
             m_grid.removeBall(p.first, p.second);
-            int pts = static_cast<int>((20 + comboBonus) * m_scoreMultiplier);
+            int pts = static_cast<int>((20 + comboBonus) * activeScoreMult);
             m_score += pts;
             totalGained += pts;
         }
 
         QPointF textPos = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
+
+        if (crystalCount > 0) {
+            triggerChronoFreeze(textPos, crystalCount);
+        }
+
+        // پاداش زمانی انتخابی و هدفمند (بدون دادن زمان به شلیک‌های ساده ۳تایی)
+        if (m_isTimeAttack) {
+            if (matches.size() >= 5) {
+                qreal bonus = 1.5 + (matches.size() - 5) * 0.5;
+                addTimeBonus(bonus, "BIG MATCH!");
+            }
+            if (m_comboStreak >= 3) {
+                addTimeBonus(1.0 * m_comboStreak, QString("x%1 COMBO!").arg(m_comboStreak));
+            }
+        }
+
         m_shockwaves.append({textPos, 20.0, 1.0, Ball::toQColor(color)});
         if (matches.size() >= 3) {
             emit shakeRequested(matches.size() * 3);
@@ -924,9 +1103,6 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
         QString scoreStr = QString("+%1").arg(totalGained);
         if (m_comboStreak > 1) {
             scoreStr += QString(" (x%1 COMBO!)").arg(m_comboStreak);
-            addTimeBonus(2.0 * m_comboStreak, "COMBO!");
-        } else {
-            addTimeBonus(2.0, "MATCH!");
         }
         spawnFloatingText(textPos, scoreStr, (m_comboStreak > 1) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
         return true;
@@ -968,23 +1144,34 @@ void GameScene::checkFloatingBalls() {
     if (!floating.empty()) {
         int dropScore = 0;
         int floatCount = floating.size();
+        int crystalCount = 0;
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
 
         for (const auto& p : floating) {
             QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
             spawnPopParticles(pCenter, QColor(148, 163, 184), 16);
 
             Ball* b = m_grid.getBall(p.first, p.second);
-            if (b && b->hasContainedSkill()) {
-                addSkillAmmo(b->getContainedSkill());
+            if (b) {
+                if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                if (b->isTimeCrystal()) crystalCount++;
+                if (b->isChronoBomb()) addTimeBonus(b->getChronoBombTimer(), "DEFUSED!");
             }
 
             m_grid.removeBall(p.first, p.second);
-            int pts = static_cast<int>(50 * m_scoreMultiplier);
+            int pts = static_cast<int>(50 * activeScoreMult);
             m_score += pts;
             dropScore += pts;
         }
 
-        addTimeBonus(3.0, "FALL BONUS!");
+        if (crystalCount > 0) {
+            triggerChronoFreeze(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300), crystalCount);
+        }
+
+        if (m_isTimeAttack && floatCount >= 4) {
+            addTimeBonus(3.0, "FALL BONUS!");
+        }
+
         spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300),
                           QString("+%1 FALL BONUS!").arg(dropScore), QColor(16, 185, 129));
 
@@ -1079,6 +1266,20 @@ void GameScene::drawPlayfieldFrame(QPainter* painter) {
     painter->setPen(Qt::NoPen);
     painter->drawRect(playfieldRect);
 
+    if (m_isTimeAttack && m_timeRemaining <= 10.0 && m_timeRemaining > 0.0 && m_chronoFreezeTimer <= 0.0) {
+        int feverAlpha = int(75 + 55 * std::sin(m_gameplayTimeSeconds * 16.0));
+        painter->setBrush(QColor(239, 68, 68, feverAlpha));
+        painter->setPen(QPen(QColor(239, 68, 68, 230), 2.5, Qt::DashLine));
+        painter->drawRect(playfieldRect.adjusted(2, 2, -2, -2));
+    }
+
+    if (m_isTimeAttack && m_chronoFreezeTimer > 0.0) {
+        int freezeAlpha = int(50 + 40 * std::sin(m_gameplayTimeSeconds * 10.0));
+        painter->setBrush(QColor(0, 242, 254, freezeAlpha));
+        painter->setPen(QPen(QColor(0, 242, 254, 220), 2.5));
+        painter->drawRect(playfieldRect.adjusted(2, 2, -2, -2));
+    }
+
     if (m_isEndless && m_dangerTelegraph) {
         int pulseAlpha = int(70 + 60 * std::sin(m_gameplayTimeSeconds * 12.0));
         painter->setBrush(QColor(239, 68, 68, pulseAlpha));
@@ -1165,8 +1366,8 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->drawText(QRectF(20, 38, 110, 20), m_username);
 
     QString diffTag = (m_difficulty == 0) ? "CADET" : ((m_difficulty == 2) ? "CYBER-GOD" : "VETERAN");
-    QString modeTitle = m_isEndless ? QString("WAVE 0%1 [%2]").arg(m_currentWave).arg(diffTag) : QString("MODE: %1").arg(m_mode.toUpper());
-    painter->setPen(m_isEndless ? (m_difficulty == 2 ? QColor(255, 51, 102) : QColor(255, 204, 0)) : ThemeManager::instance().getPrimaryColor());
+    QString modeTitle = m_isTimeAttack ? QString("TIME ATTACK [%1]").arg(diffTag) : (m_isEndless ? QString("WAVE 0%1 [%2]").arg(m_currentWave).arg(diffTag) : QString("MODE: %1").arg(m_mode.toUpper()));
+    painter->setPen(m_isTimeAttack ? (m_chronoFreezeTimer > 0 ? QColor(0, 242, 254) : QColor(255, 204, 0)) : ThemeManager::instance().getPrimaryColor());
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
     painter->drawText(QRectF(20, 58, 120, 16), modeTitle);
 
@@ -1177,9 +1378,15 @@ void GameScene::drawLeftHUD(QPainter* painter) {
         int frac = static_cast<int>((m_timeRemaining - totalSec) * 10);
         QString timeStr = QString("%1:%2.%3").arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0')).arg(frac);
 
-        QColor timerCol = (m_timeRemaining <= 10.0) ?
-                          ((std::fmod(t * 5.0, 1.0) < 0.5) ? QColor(239, 68, 68) : QColor(255, 255, 255)) :
-                          QColor(245, 158, 11);
+        QColor timerCol;
+        if (m_chronoFreezeTimer > 0.0) {
+            timerCol = QColor(0, 242, 254);
+            timeStr = QString("⏳ %1s").arg(m_chronoFreezeTimer, 0, 'f', 1);
+        } else if (m_timeRemaining <= 10.0) {
+            timerCol = (std::fmod(t * 5.0, 1.0) < 0.5) ? QColor(239, 68, 68) : QColor(255, 255, 255);
+        } else {
+            timerCol = QColor(245, 158, 11);
+        }
 
         painter->setPen(timerCol);
         painter->setFont(QFont("Consolas", 10, QFont::Bold));
@@ -1204,7 +1411,7 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->drawText(QRectF(150, 62, 50, 18), "ONLINE");
 
     QRectF statsCard(12, 108, 195, 295);
-    QColor statsBorder = (m_comboStreak >= 3) ? QColor(245, 158, 11, 160) : ((m_dangerLevel > 0.7) ? QColor(239, 68, 68, 160) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70));
+    QColor statsBorder = (m_chronoFreezeTimer > 0) ? QColor(0, 242, 254, 200) : ((m_comboStreak >= 3) ? QColor(245, 158, 11, 160) : ((m_dangerLevel > 0.7) ? QColor(239, 68, 68, 160) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70)));
     painter->setBrush(QColor(10, 16, 28, 145));
     painter->setPen(QPen(statsBorder, 1.2));
     painter->drawRoundedRect(statsCard, 8, 8);
@@ -1214,47 +1421,37 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
     painter->drawText(QRectF(22, 116, 100, 15), "LIVE SCORE");
 
-    painter->setPen((m_comboStreak >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+    painter->setPen((m_chronoFreezeTimer > 0) ? QColor(0, 242, 254) : ((m_comboStreak >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor()));
     painter->setFont(QFont("Consolas", 18, QFont::Bold));
     painter->drawText(QRectF(22, 130, 170, 26), scoreStr);
 
-    if (m_isEndless) {
+    if (m_isTimeAttack) {
+        painter->setPen(m_chronoFreezeTimer > 0 ? QColor(0, 242, 254) : QColor(148, 163, 184));
+        painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+        QString subScore = (m_chronoFreezeTimer > 0) ? "⏳ 2X CHRONO BOOST ACTIVE" : QString("CHRONO MULTIPLIER: x%1").arg(m_scoreMultiplier, 0, 'f', 1);
+        painter->drawText(QRectF(22, 162, 170, 14), subScore);
+    } else if (m_isEndless) {
         painter->setPen(QColor(148, 163, 184));
         painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
         painter->drawText(QRectF(22, 162, 170, 14), QString("MISS: %1/%2 | MULT: x%3").arg(m_missedShotsCount).arg(m_maxMissedShots).arg(m_scoreMultiplier, 0, 'f', 1));
-
-        qreal totalBarW = 170.0;
-        qreal singleBarW = (totalBarW - (m_maxMissedShots - 1) * 4.0) / m_maxMissedShots;
-        for (int b = 0; b < m_maxMissedShots; ++b) {
-            QRectF barRect(22 + b * (singleBarW + 4.0), 178, singleBarW, 8);
-            if (b < m_missedShotsCount) {
-                painter->setBrush(QColor(239, 68, 68));
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(barRect, 2, 2);
-            } else {
-                painter->setBrush(QColor(30, 41, 59, 150));
-                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
-                painter->drawRoundedRect(barRect, 2, 2);
-            }
-        }
     } else {
         painter->setPen(QColor(148, 163, 184));
         painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
         painter->drawText(QRectF(22, 162, 170, 14), QString("OVERDRIVE STREAK (x%1)").arg(m_comboStreak));
+    }
 
-        int activeBars = std::min(m_comboStreak, 5);
-        for (int b = 0; b < 5; ++b) {
-            QRectF barRect(22 + b * 34, 178, 30, 8);
-            if (b < activeBars) {
-                QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
-                painter->setBrush(barCol);
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(barRect, 2, 2);
-            } else {
-                painter->setBrush(QColor(30, 41, 59, 150));
-                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
-                painter->drawRoundedRect(barRect, 2, 2);
-            }
+    int activeBars = std::min(m_comboStreak, 5);
+    for (int b = 0; b < 5; ++b) {
+        QRectF barRect(22 + b * 34, 178, 30, 8);
+        if (b < activeBars) {
+            QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+            painter->setBrush(barCol);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(barRect, 2, 2);
+        } else {
+            painter->setBrush(QColor(30, 41, 59, 150));
+            painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
+            painter->drawRoundedRect(barRect, 2, 2);
         }
     }
 
@@ -1281,13 +1478,8 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->drawText(QRectF(84, 228, 110, 18), QString("HITS: %1 / %2").arg(m_shotsHit).arg(m_shotsFired));
 
     painter->setPen(QColor(148, 163, 184));
-    painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-    if (m_isEndless) {
-        qreal remTime = std::max(0.0, m_currentDropInterval - m_endlessRowTimer);
-        painter->drawText(QRectF(22, 264, 170, 14), QString("ROW ADVANCE IN: %1s").arg(remTime, 0, 'f', 1));
-    } else {
-        painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
-    }
+    painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+    painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
 
     auto dist = m_grid.getColorDistribution();
     int totalBalls = 0;
@@ -1316,15 +1508,10 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     QString telemetry = QString("TRAJ: %1° | BNC: %2 | SECTOR: 01").arg(m_aimAngleTelemetry, 0, 'f', 1).arg(m_aimBouncesTelemetry);
     painter->drawText(QRectF(22, 305, 175, 18), telemetry);
 
-    // هشدارهای سایبری و هشدارهای اضطراب شلیک
-    if (m_isEndless && m_difficulty == 2 && m_panicTimer >= 4.5 && std::fmod(t * 8.0, 1.0) < 0.5) {
-        painter->setPen(QColor(255, 51, 102));
+    if (m_isTimeAttack && m_chronoFreezeTimer > 0.0) {
+        painter->setPen(QColor(0, 242, 254));
         painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
-        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⚠️ CANNON OVERHEATING! ⚠️");
-    } else if (m_emergencyPurgeReady && std::fmod(t * 4.0, 1.0) < 0.5) {
-        painter->setPen(QColor(239, 68, 68));
-        painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
-        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "☣ PURGE READY (HIT TOP) ☣");
+        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⏳ CHRONO FREEZE ENGAGED ⏳");
     } else if (m_dangerLevel > 0.7 && std::fmod(t * 3.0, 1.0) < 0.5) {
         painter->setPen(QColor(239, 68, 68));
         painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));

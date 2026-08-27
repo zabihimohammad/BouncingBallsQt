@@ -266,6 +266,10 @@ public:
     bool isKey() const { return m_isKey; }
     void setKey(bool key) { m_isKey = key; }
 
+    // کریستال انجماد زمان (Time Crystal)
+    bool isTimeCrystal() const { return m_isTimeCrystal; }
+    void setTimeCrystal(bool tc) { m_isTimeCrystal = tc; }
+
     // جعبه مهمات مداری (Supply Drop)
     BallType getContainedSkill() const { return m_containedSkill; }
     void setContainedSkill(BallType skill) { m_containedSkill = skill; }
@@ -304,6 +308,7 @@ private:
     int m_col;
     bool m_isLocked;
     bool m_isKey = false;
+    bool m_isTimeCrystal = false;
     int m_freezeLevel = 0;
     bool m_isMystery = false;
     BallType m_containedSkill = BallType::Regular;
@@ -435,7 +440,7 @@ void GridManager::loadLevel(int levelNumber) {
     }
 }
 
-void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChance, bool seedHazards) {
+void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChance, bool seedHazards, bool seedTimeCrystals) {
     clearGrid();
     auto rng = QRandomGenerator::global();
     bool hasLockedBall = false;
@@ -459,6 +464,10 @@ void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChanc
                 } else if (hChance < 26) {
                     newBall->setLocked(true);
                     hasLockedBall = true;
+                }
+            } else if (seedTimeCrystals && r >= 1) {
+                if (rng->bounded(100) < 15) {
+                    newBall->setTimeCrystal(true);
                 }
             }
 
@@ -876,7 +885,7 @@ public:
     void initGrid();
     void clearGrid();
     void loadLevel(int levelNumber);
-    void generateRandomLevel(int rows = 5, int colorCount = 5, int clusterChance = 50, bool seedHazards = false);
+    void generateRandomLevel(int rows = 5, int colorCount = 5, int clusterChance = 50, bool seedHazards = false, bool seedTimeCrystals = false);
     void addRowFromTop(int wave = 1, int colorCount = 5, int clusterChance = 50);
 
     bool isOccupied(int r, int c) const;
@@ -1373,9 +1382,9 @@ FILE: src\gameplay\BallItem.cpp
 #include <QRandomGenerator>
 #include <cmath>
 
-BallItem::BallItem(BallColor color, BallType type, BallColor secColor, bool locked, qreal radius, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill, QGraphicsItem* parent)
+BallItem::BallItem(BallColor color, BallType type, BallColor secColor, bool locked, qreal radius, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill, bool isTimeCrystal, QGraphicsItem* parent)
         : QGraphicsObject(parent), m_color(color), m_type(type), m_secColor(secColor), m_isLocked(locked),
-          m_radius(radius), m_freezeLevel(freezeLevel), m_isMystery(isMystery), m_isKey(isKey), m_containedSkill(containedSkill) {
+          m_radius(radius), m_freezeLevel(freezeLevel), m_isMystery(isMystery), m_isKey(isKey), m_containedSkill(containedSkill), m_isTimeCrystal(isTimeCrystal) {
 }
 
 BallItem::BallItem(const Ball* ball, qreal radius, QGraphicsItem* parent)
@@ -1389,6 +1398,7 @@ BallItem::BallItem(const Ball* ball, qreal radius, QGraphicsItem* parent)
         m_isMystery = ball->isMystery();
         m_isKey = ball->isKey();
         m_containedSkill = ball->getContainedSkill();
+        m_isTimeCrystal = ball->isTimeCrystal();
     } else {
         m_color = BallColor::None;
         m_type = BallType::Regular;
@@ -1398,6 +1408,7 @@ BallItem::BallItem(const Ball* ball, qreal radius, QGraphicsItem* parent)
         m_isMystery = false;
         m_isKey = false;
         m_containedSkill = BallType::Regular;
+        m_isTimeCrystal = false;
     }
 }
 
@@ -1405,7 +1416,7 @@ QRectF BallItem::boundingRect() const {
     return QRectF(-m_radius - 8, -m_radius - 8, (m_radius + 8) * 2, (m_radius + 8) * 2);
 }
 
-void BallItem::updateData(BallColor color, BallType type, BallColor secColor, bool locked, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill) {
+void BallItem::updateData(BallColor color, BallType type, BallColor secColor, bool locked, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill, bool isTimeCrystal) {
     m_color = color;
     m_type = type;
     m_secColor = secColor;
@@ -1414,16 +1425,17 @@ void BallItem::updateData(BallColor color, BallType type, BallColor secColor, bo
     m_isMystery = isMystery;
     m_isKey = isKey;
     m_containedSkill = containedSkill;
+    m_isTimeCrystal = isTimeCrystal;
     update();
 }
 
 void BallItem::paint(QPainter* painter, const QStyleOptionGraphicsItem* option, QWidget* widget) {
     Q_UNUSED(option);
     Q_UNUSED(widget);
-    paintBall(painter, QPointF(0, 0), m_radius, m_color, m_type, m_secColor, m_isLocked, m_freezeLevel, m_isMystery, m_isKey, m_containedSkill);
+    paintBall(painter, QPointF(0, 0), m_radius, m_color, m_type, m_secColor, m_isLocked, m_freezeLevel, m_isMystery, m_isKey, m_containedSkill, m_isTimeCrystal);
 }
 
-void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type, BallColor secColor, bool locked, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill) {
+void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius, BallColor color, BallType type, BallColor secColor, bool locked, int freezeLevel, bool isMystery, bool isKey, BallType containedSkill, bool isTimeCrystal) {
     painter->save();
     painter->setRenderHint(QPainter::Antialiasing);
     painter->translate(center);
@@ -1432,9 +1444,7 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
     qreal t = (ms % 600000) / 1000.0;
     qreal breath = (std::sin(t * 4.0) + 1.0) * 0.5;
 
-    // =========================================================================
-    // ⚡ 1. HYPER-CHARGED PHOTON LASER BALL
-    // =========================================================================
+    // ۱. گوی لیزر
     if (type == BallType::Laser) {
         QRadialGradient outerGlow(0, 0, radius * 1.45);
         outerGlow.setColorAt(0.0, QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), int(180 + breath * 75)));
@@ -1474,29 +1484,11 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->setPen(QPen(QColor(255, 255, 255, 255), 3.0, Qt::SolidLine, Qt::RoundCap));
         painter->drawLine(QPointF(-radius + 2, vib), QPointF(radius - 2, vib));
 
-        painter->setPen(QPen(QColor(255, 255, 255, 220), 1.2));
-        for (int i = 0; i < 3; ++i) {
-            qreal a = (i * 2.09) + t * 5.0;
-            qreal sx = std::cos(a) * (radius * 0.7);
-            qreal sy = std::sin(a) * (radius * 0.7);
-            painter->drawLine(QPointF(sx, sy), QPointF(sx + (std::sin(t * 20.0 + i) * 5), sy + (std::cos(t * 20.0 + i) * 5)));
-        }
-
-        QRadialGradient glint(-radius * 0.35, -radius * 0.35, radius * 0.5);
-        glint.setColorAt(0.0, QColor(255, 255, 255, 240));
-        glint.setColorAt(0.4, QColor(255, 255, 255, 80));
-        glint.setColorAt(1.0, QColor(255, 255, 255, 0));
-        painter->setBrush(glint);
-        painter->setPen(Qt::NoPen);
-        painter->drawEllipse(QPointF(-radius * 0.35, -radius * 0.35), radius * 0.45, radius * 0.35);
-
         painter->restore();
         return;
     }
 
-    // =========================================================================
-    // 💣 2. APOCALYPTIC THERMO-NUCLEAR BOMB
-    // =========================================================================
+    // ۲. گوی بمب
     if (type == BallType::Bomb) {
         QRadialGradient bombHull(0, 0, radius);
         bombHull.setColorAt(0.0, QColor(60, 20, 20));
@@ -1526,33 +1518,11 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(0,0), coreR, coreR);
 
-        qreal waveR = std::fmod(t * 28.0, radius * 1.3);
-        int waveA = int((1.0 - (waveR / (radius * 1.3))) * 220);
-        painter->setPen(QPen(QColor(239, 68, 68, waveA), 1.8));
-        painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(QPointF(0,0), waveR, waveR);
-
-        if (std::fmod(t * 5.0, 1.0) < 0.5) {
-            painter->setBrush(QColor(255, 0, 0));
-            painter->setPen(QPen(Qt::white, 0.8));
-            painter->drawEllipse(QPointF(0, -radius * 0.55), 3.0, 3.0);
-        }
-
-        for (int i = 0; i < 4; ++i) {
-            qreal spkA = t * 6.5 + (i * 1.57);
-            qreal spkR = radius * 0.7;
-            painter->setBrush(QColor(255, 200, 0));
-            painter->setPen(Qt::NoPen);
-            painter->drawEllipse(QPointF(std::cos(spkA)*spkR, std::sin(spkA)*spkR), 2.0, 2.0);
-        }
-
         painter->restore();
         return;
     }
 
-    // =========================================================================
-    // 🌈 3. COSMIC CHROMATIC HYPER-PRISM (Rainbow Wildcard)
-    // =========================================================================
+    // ۳. گوی رنگین‌کمان
     if (type == BallType::Rainbow) {
         qreal hue = std::fmod(t * 0.15, 1.0);
         QColor prismColor = QColor::fromHsvF(hue, 0.85, 0.95);
@@ -1574,42 +1544,11 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(0,0), radius, radius);
 
-        painter->setPen(QPen(QColor(255, 255, 255, 160), 1.0));
-        painter->setBrush(Qt::NoBrush);
-        for (int i = 0; i < 6; ++i) {
-            qreal a = i * M_PI / 3.0;
-            painter->drawLine(QPointF(0,0), QPointF(std::cos(a) * radius, std::sin(a) * radius));
-        }
-
-        painter->save();
-        painter->rotate(t * 50.0);
-        painter->setPen(QPen(QColor(255, 255, 255, 240), 1.8));
-        painter->setBrush(QColor(255, 255, 255, 140));
-        QPolygonF star;
-        qreal s1 = radius * 0.6;
-        qreal s2 = radius * 0.16;
-        star << QPointF(0, -s1) << QPointF(s2, -s2)
-             << QPointF(s1, 0) << QPointF(s2, s2)
-             << QPointF(0, s1) << QPointF(-s2, s2)
-             << QPointF(-s1, 0) << QPointF(-s2, -s2);
-        painter->drawPolygon(star);
-        painter->restore();
-
-        for (int i = 0; i < 3; ++i) {
-            qreal a = (i * 2.09) + t * 4.0;
-            qreal r = radius * 0.65;
-            painter->setBrush(QColor::fromHsvF(std::fmod(hue + (i * 0.33), 1.0), 0.8, 1.0));
-            painter->setPen(Qt::NoPen);
-            painter->drawEllipse(QPointF(std::cos(a)*r, std::sin(a)*r), 2.2, 2.2);
-        }
-
         painter->restore();
         return;
     }
 
-    // =========================================================================
-    // ☯️ 4. QUANTUM HELICAL DUAL BALL
-    // =========================================================================
+    // ۴. گوی دو رنگ
     if (type == BallType::DualColor) {
         QColor c1 = Ball::toQColor(color);
         QColor c2 = Ball::toQColor(secColor != BallColor::None ? secColor : BallColor::Yellow);
@@ -1640,174 +1579,87 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->setBrush(Qt::NoBrush);
         painter->drawPath(sPath);
 
-        qreal orbA = t * 4.5;
-        painter->setBrush(Qt::white);
-        painter->drawEllipse(QPointF(std::cos(orbA) * (radius * 0.5), std::sin(orbA) * (radius * 0.5)), 2.5, 2.5);
-        painter->drawEllipse(QPointF(std::cos(orbA + M_PI) * (radius * 0.5), std::sin(orbA + M_PI) * (radius * 0.5)), 2.5, 2.5);
-
         painter->restore();
 
         QRadialGradient sphereShadow(0, 0, radius);
-        sphereShadow.setColorAt(0.0, QColor(0, 0, 0, 0));
-        sphereShadow.setColorAt(0.7, QColor(0, 0, 0, 20));
-        sphereShadow.setColorAt(0.9, QColor(0, 0, 0, 150));
-        sphereShadow.setColorAt(1.0, QColor(0, 0, 0, 230));
+        sphereShadow.setColorAt(0.7, QColor(0, 0, 0, 0));
+        sphereShadow.setColorAt(1.0, QColor(0, 0, 0, 200));
         painter->setBrush(sphereShadow);
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(0,0), radius, radius);
-
-        painter->restore();
-        return;
     }
+        // ۵. گوی‌های رنگی پایه
+    else {
+        QColor baseCol = isMystery ? QColor(71, 85, 105) : (color == BallColor::Black ? QColor(30, 41, 59) : Ball::toQColor(color));
+        if (locked) baseCol = QColor(75, 85, 99);
 
-    // =========================================================================
-    // 🧬 5. REGULAR ELEMENTAL BALLS WITH RUNES & GEODESIC SOCCER MESH
-    // =========================================================================
-    QColor baseCol = isMystery ? QColor(71, 85, 105) : (color == BallColor::Black ? QColor(30, 41, 59) : Ball::toQColor(color));
-    if (locked) baseCol = QColor(75, 85, 99);
-
-    QRadialGradient grad(-radius * 0.35, -radius * 0.35, radius * 1.4);
-    grad.setColorAt(0.0, baseCol.lighter(165));
-    grad.setColorAt(0.35, baseCol);
-    grad.setColorAt(0.85, baseCol.darker(175));
-    grad.setColorAt(1.0, baseCol.darker(280));
-    painter->setBrush(grad);
-    painter->setPen(Qt::NoPen);
-    painter->drawEllipse(QPointF(0,0), radius, radius);
-
-    // مش ژئودزیک سه‌بعدی
-    if (!isMystery && color != BallColor::Black && freezeLevel == 0) {
-        painter->save();
-        QPainterPath clip;
-        clip.addEllipse(QPointF(0,0), radius, radius);
-        painter->setClipPath(clip);
-
-        painter->setPen(QPen(QColor(15, 23, 42, 160), 0.9));
-        painter->setBrush(Qt::NoBrush);
-
-        qreal r_p = radius * 0.28;
-        QPolygonF pentagon0;
-        QVector<QPointF> pVerts;
-        for (int i = 0; i < 5; ++i) {
-            qreal a = (i * 72.0 - 90.0) * M_PI / 180.0;
-            QPointF pt(r_p * std::cos(a), r_p * std::sin(a));
-            pentagon0 << pt;
-            pVerts << pt;
-        }
-        painter->setBrush(QColor(0, 0, 0, 35));
-        painter->drawPolygon(pentagon0);
-        painter->setBrush(Qt::NoBrush);
-
-        for (int i = 0; i < 5; ++i) {
-            QPointF v1 = pVerts[i];
-            QPointF v2 = pVerts[(i + 1) % 5];
-            QPointF mid = (v1 + v2) * 0.5;
-            qreal midAngle = std::atan2(mid.y(), mid.x());
-
-            qreal r_h_out = radius * 0.64;
-            qreal r_h_far = radius * 0.90;
-
-            qreal a1 = (i * 72.0 - 90.0) * M_PI / 180.0;
-            qreal a2 = (((i + 1) % 5) * 72.0 - 90.0) * M_PI / 180.0;
-            qreal aMid = midAngle;
-
-            QPointF h3(r_h_out * std::cos(a2 + 0.16), r_h_out * std::sin(a2 + 0.16));
-            QPointF h4(r_h_far * std::cos(aMid + 0.14), r_h_far * std::sin(aMid + 0.14));
-            QPointF h5(r_h_far * std::cos(aMid - 0.14), r_h_far * std::sin(aMid - 0.14));
-            QPointF h6(r_h_out * std::cos(a1 - 0.16), r_h_out * std::sin(a1 - 0.16));
-
-            QPolygonF hexPoly;
-            hexPoly << v1 << v2 << h3 << h4 << h5 << h6;
-            painter->drawPolygon(hexPoly);
-
-            QPolygonF outerPent;
-            qreal r_rim = radius * 1.05;
-            QPointF p_out1(r_rim * std::cos(a1), r_rim * std::sin(a1));
-            outerPent << h6 << h5 << p_out1;
-            painter->setBrush(QColor(0, 0, 0, 25));
-            painter->drawPolygon(outerPent);
-            painter->setBrush(Qt::NoBrush);
-        }
-
-        QRadialGradient sphereShadow(0, 0, radius);
-        sphereShadow.setColorAt(0.0, QColor(0, 0, 0, 0));
-        sphereShadow.setColorAt(0.7, QColor(0, 0, 0, 20));
-        sphereShadow.setColorAt(0.9, QColor(0, 0, 0, 150));
-        sphereShadow.setColorAt(1.0, QColor(0, 0, 0, 230));
-        painter->setBrush(sphereShadow);
+        QRadialGradient grad(-radius * 0.35, -radius * 0.35, radius * 1.4);
+        grad.setColorAt(0.0, baseCol.lighter(165));
+        grad.setColorAt(0.35, baseCol);
+        grad.setColorAt(0.85, baseCol.darker(175));
+        grad.setColorAt(1.0, baseCol.darker(280));
+        painter->setBrush(grad);
         painter->setPen(Qt::NoPen);
         painter->drawEllipse(QPointF(0,0), radius, radius);
-        painter->restore();
+
+        // مش ژئودزیک
+        if (!isMystery && color != BallColor::Black && freezeLevel == 0) {
+            painter->save();
+            QPainterPath clip;
+            clip.addEllipse(QPointF(0,0), radius, radius);
+            painter->setClipPath(clip);
+
+            painter->setPen(QPen(QColor(15, 23, 42, 160), 0.9));
+            painter->setBrush(Qt::NoBrush);
+
+            qreal r_p = radius * 0.28;
+            QPolygonF pentagon0;
+            QVector<QPointF> pVerts;
+            for (int i = 0; i < 5; ++i) {
+                qreal a = (i * 72.0 - 90.0) * M_PI / 180.0;
+                QPointF pt(r_p * std::cos(a), r_p * std::sin(a));
+                pentagon0 << pt;
+                pVerts << pt;
+            }
+            painter->setBrush(QColor(0, 0, 0, 35));
+            painter->drawPolygon(pentagon0);
+            painter->setBrush(Qt::NoBrush);
+
+            for (int i = 0; i < 5; ++i) {
+                QPointF v1 = pVerts[i];
+                QPointF v2 = pVerts[(i + 1) % 5];
+                QPointF mid = (v1 + v2) * 0.5;
+                qreal midAngle = std::atan2(mid.y(), mid.x());
+
+                qreal r_h_out = radius * 0.64;
+                qreal r_h_far = radius * 0.90;
+
+                qreal a1 = (i * 72.0 - 90.0) * M_PI / 180.0;
+                qreal a2 = (((i + 1) % 5) * 72.0 - 90.0) * M_PI / 180.0;
+                qreal aMid = midAngle;
+
+                QPointF h3(r_h_out * std::cos(a2 + 0.16), r_h_out * std::sin(a2 + 0.16));
+                QPointF h4(r_h_far * std::cos(aMid + 0.14), r_h_far * std::sin(aMid + 0.14));
+                QPointF h5(r_h_far * std::cos(aMid - 0.14), r_h_far * std::sin(aMid - 0.14));
+                QPointF h6(r_h_out * std::cos(a1 - 0.16), r_h_out * std::sin(a1 - 0.16));
+
+                QPolygonF hexPoly;
+                hexPoly << v1 << v2 << h3 << h4 << h5 << h6;
+                painter->drawPolygon(hexPoly);
+            }
+
+            QRadialGradient sphereShadow(0, 0, radius);
+            sphereShadow.setColorAt(0.0, QColor(0, 0, 0, 0));
+            sphereShadow.setColorAt(0.7, QColor(0, 0, 0, 20));
+            sphereShadow.setColorAt(1.0, QColor(0, 0, 0, 230));
+            painter->setBrush(sphereShadow);
+            painter->setPen(Qt::NoPen);
+            painter->drawEllipse(QPointF(0,0), radius, radius);
+            painter->restore();
+        }
     }
 
-    // رون‌های الفبای نئونی
-    if (!isMystery && color != BallColor::Black && freezeLevel == 0) {
-        painter->save();
-        qreal runePulse = 0.75 + breath * 0.25;
-
-        if (color == BallColor::Red) {
-            painter->rotate(t * 25.0);
-            painter->setPen(QPen(QColor(255, 230, 100, int(220 * runePulse)), 1.5));
-            painter->setBrush(QColor(255, 100, 0, int(100 * runePulse)));
-            for (int i = 0; i < 3; ++i) {
-                painter->rotate(120);
-                painter->drawArc(QRectF(-5, -10, 10, 10), 0, 140 * 16);
-            }
-            painter->setBrush(QColor(255, 255, 255, 220));
-            painter->setPen(Qt::NoPen);
-            painter->drawEllipse(QPointF(0,0), 2.8 * runePulse, 2.8 * runePulse);
-        }
-        else if (color == BallColor::Blue) {
-            painter->setPen(QPen(QColor(180, 245, 255, int(230 * runePulse)), 1.4));
-            painter->setBrush(Qt::NoBrush);
-            painter->drawRect(QRectF(-3.5, -3.5, 7, 7));
-            painter->drawLine(0, -3.5, 0, -8);
-            painter->drawLine(0, 3.5, 0, 8);
-            painter->drawLine(-3.5, 0, -8, 0);
-            painter->drawLine(3.5, 0, 8, 0);
-            painter->setBrush(ThemeManager::instance().getPrimaryColor());
-            painter->drawEllipse(QPointF(0, -8), 1.4, 1.4);
-            painter->drawEllipse(QPointF(0, 8), 1.4, 1.4);
-            painter->drawEllipse(QPointF(-8, 0), 1.4, 1.4);
-            painter->drawEllipse(QPointF(8, 0), 1.4, 1.4);
-        }
-        else if (color == BallColor::Green) {
-            painter->rotate(t * -30.0);
-            painter->setPen(QPen(QColor(180, 255, 180, int(220 * runePulse)), 1.4));
-            painter->setBrush(QColor(0, 255, 100, int(90 * runePulse)));
-            for (int i = 0; i < 3; ++i) {
-                painter->rotate(120);
-                painter->drawEllipse(QPointF(0, -5.0), 2.8, 2.8);
-            }
-            painter->setBrush(Qt::white);
-            painter->drawEllipse(QPointF(0,0), 2.0, 2.0);
-        }
-        else if (color == BallColor::Yellow) {
-            painter->setPen(QPen(QColor(255, 255, 255, int(240 * runePulse)), 1.6));
-            painter->setBrush(QColor(255, 230, 50, int(150 * runePulse)));
-            QPolygonF bolt;
-            bolt << QPointF(1, -8) << QPointF(-3.5, 0) << QPointF(0, 0)
-                 << QPointF(-1.5, 8) << QPointF(4.5, -1) << QPointF(1, -1);
-            painter->drawPolygon(bolt);
-        }
-        else if (color == BallColor::Purple) {
-            painter->rotate(t * 50.0);
-            painter->setPen(QPen(QColor(255, 200, 255, int(220 * runePulse)), 1.4, Qt::DashLine));
-            painter->setBrush(Qt::NoBrush);
-            painter->drawEllipse(QPointF(0,0), 7.5, 7.5);
-            painter->setPen(QPen(QColor(255, 255, 255, 200), 1.4));
-            painter->drawArc(QRectF(-5.5, -5.5, 11, 11), 0, 180 * 16);
-            painter->drawArc(QRectF(-5.5, -5.5, 11, 11), 180 * 16, 180 * 16);
-            painter->setBrush(QColor(255, 255, 255, 230));
-            painter->setPen(Qt::NoPen);
-            painter->drawEllipse(QPointF(0,0), 2.2, 2.2);
-        }
-        painter->restore();
-    }
-
-    // =========================================================================
-    // ۶. لایه‌های موانع تعاملی (یخ، قفل، کلید، مه، محموله)
-    // =========================================================================
+    // ۶. وضعیت‌های تعاملی و ویژه
     if (freezeLevel > 0) {
         painter->save();
         QColor iceColor = (freezeLevel == 2) ? QColor(147, 197, 253, 190) : QColor(191, 219, 254, 130);
@@ -1818,10 +1670,6 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->setPen(QPen(Qt::white, 1.5));
         painter->drawLine(-radius * 0.6, -radius * 0.4, 0, 0);
         painter->drawLine(0, 0, radius * 0.5, radius * 0.6);
-        if (freezeLevel == 1) {
-            painter->drawLine(-radius * 0.2, radius * 0.5, 0, 0);
-            painter->drawLine(0, 0, radius * 0.6, -radius * 0.3);
-        }
         painter->restore();
     }
 
@@ -1842,23 +1690,11 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
 
     if (locked) {
         painter->save();
-        painter->setBrush(QColor(203, 213, 225));
-        painter->setPen(QPen(QColor(15, 23, 42), 1.0));
-        qreal rivD = radius * 0.65;
-        painter->drawEllipse(QPointF(-rivD, -rivD), 2.0, 2.0);
-        painter->drawEllipse(QPointF(rivD, -rivD), 2.0, 2.0);
-        painter->drawEllipse(QPointF(-rivD, rivD), 2.0, 2.0);
-        painter->drawEllipse(QPointF(rivD, rivD), 2.0, 2.0);
-
         painter->setBrush(QColor(15, 23, 42, 220));
         painter->setPen(QPen(QColor(239, 68, 68), 1.6));
         painter->drawRoundedRect(QRectF(-6.5, -3.5, 13, 10), 2, 2);
         painter->setBrush(Qt::NoBrush);
         painter->drawArc(-4.5, -10, 9, 9, 0, 180 * 16);
-
-        qreal scanY = -7.0 + std::fmod(t * 16.0, 14.0);
-        painter->setPen(QPen(QColor(239, 68, 68, 200), 1.5));
-        painter->drawLine(-5.5, scanY, 5.5, scanY);
         painter->restore();
     }
 
@@ -1869,6 +1705,21 @@ void BallItem::paintBall(QPainter* painter, const QPointF& center, qreal radius,
         painter->drawText(QRectF(-radius, -radius + 1, radius * 2, radius * 2), Qt::AlignCenter, icon);
     }
 
+    // کریستال ساعت‌شنی انجماد زمان (Chrono-Freeze)
+    if (isTimeCrystal) {
+        painter->save();
+        qreal crystalPulse = std::sin(t * 6.0) * 0.3 + 0.7;
+        painter->setPen(QPen(QColor(0, 242, 254, int(220 * crystalPulse)), 1.8));
+        painter->setBrush(QColor(0, 242, 254, int(60 * crystalPulse)));
+        painter->drawEllipse(QPointF(0,0), radius * 0.88, radius * 0.88);
+
+        painter->setFont(QFont("Segoe UI Emoji", 10, QFont::Bold));
+        painter->setPen(Qt::white);
+        painter->drawText(QRectF(-radius, -radius + 1, radius * 2, radius * 2), Qt::AlignCenter, "⏳");
+        painter->restore();
+    }
+
+    // درخشش شیشه‌ای روی گوی
     QRadialGradient glint(-radius * 0.35, -radius * 0.35, radius * 0.55);
     glint.setColorAt(0.0, QColor(255, 255, 255, 220));
     glint.setColorAt(0.45, QColor(255, 255, 255, 60));
@@ -1901,6 +1752,7 @@ public:
              bool isMystery = false,
              bool isKey = false,
              BallType containedSkill = BallType::Regular,
+             bool isTimeCrystal = false,
              QGraphicsItem* parent = nullptr);
 
     BallItem(const Ball* ball, qreal radius = GridManager::BALL_RADIUS, QGraphicsItem* parent = nullptr);
@@ -1915,7 +1767,8 @@ public:
                     int freezeLevel = 0,
                     bool isMystery = false,
                     bool isKey = false,
-                    BallType containedSkill = BallType::Regular);
+                    BallType containedSkill = BallType::Regular,
+                    bool isTimeCrystal = false);
 
     static void paintBall(QPainter* painter,
                           const QPointF& center,
@@ -1927,7 +1780,8 @@ public:
                           int freezeLevel = 0,
                           bool isMystery = false,
                           bool isKey = false,
-                          BallType containedSkill = BallType::Regular);
+                          BallType containedSkill = BallType::Regular,
+                          bool isTimeCrystal = false);
 
 private:
     BallColor m_color;
@@ -1939,6 +1793,7 @@ private:
     bool m_isMystery;
     bool m_isKey;
     BallType m_containedSkill;
+    bool m_isTimeCrystal;
 };
 
 ======================================================================
@@ -2174,10 +2029,11 @@ GameScene::~GameScene() {
 }
 
 void GameScene::initGame() {
-    m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.compare("Time", Qt::CaseInsensitive) == 0);
+    m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.contains("Time", Qt::CaseInsensitive));
     m_isEndless = (m_mode.compare("ENDLESS", Qt::CaseInsensitive) == 0 || m_mode.contains("Endless", Qt::CaseInsensitive));
 
     m_timeRemaining = 75.0;
+    m_chronoFreezeTimer = 0.0;
     m_currentWave = 1;
     m_waveTimer = 0.0;
     m_endlessRowTimer = 0.0;
@@ -2197,8 +2053,16 @@ void GameScene::initGame() {
     int startRows = 5;
     bool seedHazards = false;
 
-    if (m_isEndless) {
-        if (m_difficulty == 0) { // Cadet (Easy)
+    if (m_isTimeAttack) {
+        m_maxAimBounces = 2;
+        m_baseScoreMultiplier = 1.0;
+        m_scoreMultiplier = 1.0;
+        m_activeColorsCount = 5;
+        m_clusterChance = 30;
+        // کاشت حباب‌های انجماد زمان در زمین
+        m_grid.generateRandomLevel(5, 5, 30, false, true);
+    } else if (m_isEndless) {
+        if (m_difficulty == 0) {
             m_currentDropInterval = 16.0;
             m_maxMissedShots = 5;
             m_maxAimBounces = 2;
@@ -2208,7 +2072,7 @@ void GameScene::initGame() {
             m_clusterChance = 50;
             startRows = 4;
             seedHazards = false;
-        } else if (m_difficulty == 1) { // Veteran (Normal)
+        } else if (m_difficulty == 1) {
             m_currentDropInterval = 12.0;
             m_maxMissedShots = 3;
             m_maxAimBounces = 1;
@@ -2218,7 +2082,7 @@ void GameScene::initGame() {
             m_clusterChance = 25;
             startRows = 5;
             seedHazards = false;
-        } else { // Cyber-God (Extreme)
+        } else {
             m_currentDropInterval = 8.0;
             m_maxMissedShots = 2;
             m_maxAimBounces = 1;
@@ -2229,9 +2093,9 @@ void GameScene::initGame() {
             startRows = 6;
             seedHazards = true;
         }
-        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards);
+        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards, false);
     } else if (m_mode.compare("Random", Qt::CaseInsensitive) == 0 || m_mode.compare("CHAOS", Qt::CaseInsensitive) == 0) {
-        m_grid.generateRandomLevel(5, 5, 25, false);
+        m_grid.generateRandomLevel(5, 5, 25, false, false);
     } else {
         m_grid.loadLevel(m_levelNumber);
     }
@@ -2390,6 +2254,14 @@ void GameScene::addTimeBonus(qreal seconds, const QString& reason) {
     m_timeRemaining += seconds;
     QPointF hudPos(PLAYFIELD_X + (PLAYFIELD_W / 2.0), 60.0);
     spawnFloatingText(hudPos, QString("+%1s %2").arg(static_cast<int>(seconds)).arg(reason), QColor(255, 204, 0));
+}
+
+void GameScene::triggerChronoFreeze(const QPointF& pos) {
+    m_chronoFreezeTimer = 4.0;
+    SoundManager::instance().playWin();
+    emit shakeRequested(10);
+    m_shockwaves.append({pos, 35.0, 1.0, QColor(0, 242, 254)});
+    spawnFloatingText(pos, "⏳ CHRONO FREEZE! 2X MULTIPLIER (4s)", QColor(0, 242, 254));
 }
 
 void GameScene::checkOverdriveTrigger(const QPointF& center) {
@@ -2635,7 +2507,7 @@ void GameScene::updateGameLoop() {
     m_displayedScore += (m_score - m_displayedScore) * 0.15;
     if (std::abs(m_score - m_displayedScore) < 0.5) m_displayedScore = m_score;
 
-    // ۱. تایمر اضطراب شلیک خودکار (Panic Clock) در سختی Cyber-God
+    // ۱. تایمر اضطراب شلیک خودکار (Panic Clock)
     if (m_isEndless && m_difficulty == 2 && !m_isFlying) {
         m_panicTimer += 0.016;
         if (m_panicTimer >= 6.0) {
@@ -2682,15 +2554,23 @@ void GameScene::updateGameLoop() {
         }
     }
 
-    // ۵. منطق Time Attack
+    // ۵. منطق Time Attack و تایمر انجماد زمان (Chrono Freeze)
     if (m_isTimeAttack) {
-        m_timeRemaining -= 0.016;
-        if (m_timeRemaining <= 0.0) {
-            m_timeRemaining = 0.0;
-            m_isPaused = true;
-            SoundManager::instance().playWin();
-            emit gameWon(m_score);
-            return;
+        if (m_chronoFreezeTimer > 0.0) {
+            m_chronoFreezeTimer -= 0.016;
+            if (m_chronoFreezeTimer <= 0.0) {
+                m_chronoFreezeTimer = 0.0;
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 80), "CHRONO RESUMED", QColor(148, 163, 184));
+            }
+        } else {
+            m_timeRemaining -= 0.016;
+            if (m_timeRemaining <= 0.0) {
+                m_timeRemaining = 0.0;
+                m_isPaused = true;
+                SoundManager::instance().playWin();
+                emit gameWon(m_score);
+                return;
+            }
         }
     }
 
@@ -2860,6 +2740,8 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
         QPointF worldCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
         bool hitSuccessful = false;
 
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
+
         if (m_isEndless && m_emergencyPurgeReady && r <= 1) {
             executeEmergencyPurge(worldCenter);
             return;
@@ -2872,12 +2754,13 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 spawnPopParticles(pCenter, QColor(231, 76, 60), 20);
 
                 Ball* b = m_grid.getBall(p.first, p.second);
-                if (b && b->hasContainedSkill()) {
-                    addSkillAmmo(b->getContainedSkill());
+                if (b) {
+                    if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                    if (b->isTimeCrystal()) triggerChronoFreeze(pCenter);
                 }
 
                 m_grid.removeBall(p.first, p.second);
-                m_score += static_cast<int>(30 * m_scoreMultiplier);
+                m_score += static_cast<int>(30 * activeScoreMult);
             }
             m_shockwaves.append({worldCenter, 25.0, 1.0, QColor(231, 76, 60)});
             emit shakeRequested(12);
@@ -2899,12 +2782,13 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                         spawnPopParticles(pCenter, ThemeManager::instance().getPrimaryColor(), 16);
 
                         Ball* b = m_grid.getBall(targetRow, colIdx);
-                        if (b && b->hasContainedSkill()) {
-                            addSkillAmmo(b->getContainedSkill());
+                        if (b) {
+                            if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                            if (b->isTimeCrystal()) triggerChronoFreeze(pCenter);
                         }
 
                         m_grid.removeBall(targetRow, colIdx);
-                        m_score += static_cast<int>(25 * m_scoreMultiplier);
+                        m_score += static_cast<int>(25 * activeScoreMult);
                     }
                 }
                 spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, targetRow * 38.0 + 20.0),
@@ -2948,8 +2832,9 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                     spawnPopParticles(pCenter, QColor(255, 204, 0), 16);
 
                     Ball* b = m_grid.getBall(p.first, p.second);
-                    if (b && b->hasContainedSkill()) {
-                        addSkillAmmo(b->getContainedSkill());
+                    if (b) {
+                        if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                        if (b->isTimeCrystal()) triggerChronoFreeze(pCenter);
                     }
 
                     m_grid.removeBall(p.first, p.second);
@@ -2957,7 +2842,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 }
             }
 
-            int pts = static_cast<int>(count * 35 * m_scoreMultiplier);
+            int pts = static_cast<int>(count * 35 * activeScoreMult);
             m_score += pts;
             m_shockwaves.append({worldCenter, 20.0, 1.0, QColor(255, 204, 0)});
             spawnFloatingText(worldCenter, QString("+%1 RAINBOW CASCADE!").arg(pts), QColor(255, 204, 0));
@@ -2997,7 +2882,17 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             SoundManager::instance().playGameOver();
             emit gameOver(m_score);
         } else if (m_grid.isCleared()) {
-            if (m_isEndless) {
+            if (m_isTimeAttack) {
+                m_score += static_cast<int>(500 * activeScoreMult);
+                emit scoreChanged(m_score);
+                SoundManager::instance().playWin();
+                addTimeBonus(15.0, "BOARD PURGED!");
+                m_grid.generateRandomLevel(5, 5, 30, false, true);
+                redrawGrid();
+                syncCannonColorsWithGrid();
+                emit shakeRequested(15);
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 180), "★ BOARD PURGED! +15s BONUS! ★", QColor(0, 242, 254));
+            } else if (m_isEndless) {
                 m_score += static_cast<int>(500 * m_scoreMultiplier);
                 emit scoreChanged(m_score);
                 SoundManager::instance().playWin();
@@ -3009,7 +2904,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 m_endlessRowTimer = 0.0;
                 m_missedShotsCount = 0;
 
-                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2));
+                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2), false);
                 redrawGrid();
                 syncCannonColorsWithGrid();
 
@@ -3037,6 +2932,7 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
 
         int comboBonus = m_comboStreak * 10;
         int totalGained = 0;
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
 
         bool keyPopped = false;
         for (const auto& p : matches) {
@@ -3053,12 +2949,13 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
             spawnPopParticles(pCenter, Ball::toQColor(m_grid.getBall(p.first, p.second)->getPrimaryColor()), 14);
 
             Ball* b = m_grid.getBall(p.first, p.second);
-            if (b && b->hasContainedSkill()) {
-                addSkillAmmo(b->getContainedSkill());
+            if (b) {
+                if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                if (b->isTimeCrystal()) triggerChronoFreeze(pCenter);
             }
 
             m_grid.removeBall(p.first, p.second);
-            int pts = static_cast<int>((20 + comboBonus) * m_scoreMultiplier);
+            int pts = static_cast<int>((20 + comboBonus) * activeScoreMult);
             m_score += pts;
             totalGained += pts;
         }
@@ -3116,23 +3013,25 @@ void GameScene::checkFloatingBalls() {
     if (!floating.empty()) {
         int dropScore = 0;
         int floatCount = floating.size();
+        qreal activeScoreMult = m_scoreMultiplier * (m_chronoFreezeTimer > 0.0 ? 2.0 : 1.0);
 
         for (const auto& p : floating) {
             QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
             spawnPopParticles(pCenter, QColor(148, 163, 184), 16);
 
             Ball* b = m_grid.getBall(p.first, p.second);
-            if (b && b->hasContainedSkill()) {
-                addSkillAmmo(b->getContainedSkill());
+            if (b) {
+                if (b->hasContainedSkill()) addSkillAmmo(b->getContainedSkill());
+                if (b->isTimeCrystal()) triggerChronoFreeze(pCenter);
             }
 
             m_grid.removeBall(p.first, p.second);
-            int pts = static_cast<int>(50 * m_scoreMultiplier);
+            int pts = static_cast<int>(50 * activeScoreMult);
             m_score += pts;
             dropScore += pts;
         }
 
-        addTimeBonus(3.0, "FALL BONUS!");
+        addTimeBonus(5.0, "FALL BONUS!");
         spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300),
                           QString("+%1 FALL BONUS!").arg(dropScore), QColor(16, 185, 129));
 
@@ -3227,6 +3126,13 @@ void GameScene::drawPlayfieldFrame(QPainter* painter) {
     painter->setPen(Qt::NoPen);
     painter->drawRect(playfieldRect);
 
+    if (m_isTimeAttack && m_chronoFreezeTimer > 0.0) {
+        int freezeAlpha = int(50 + 40 * std::sin(m_gameplayTimeSeconds * 10.0));
+        painter->setBrush(QColor(0, 242, 254, freezeAlpha));
+        painter->setPen(QPen(QColor(0, 242, 254, 220), 2.5));
+        painter->drawRect(playfieldRect.adjusted(2, 2, -2, -2));
+    }
+
     if (m_isEndless && m_dangerTelegraph) {
         int pulseAlpha = int(70 + 60 * std::sin(m_gameplayTimeSeconds * 12.0));
         painter->setBrush(QColor(239, 68, 68, pulseAlpha));
@@ -3312,9 +3218,8 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Segoe UI", 11, QFont::Black));
     painter->drawText(QRectF(20, 38, 110, 20), m_username);
 
-    QString diffTag = (m_difficulty == 0) ? "CADET" : ((m_difficulty == 2) ? "CYBER-GOD" : "VETERAN");
-    QString modeTitle = m_isEndless ? QString("WAVE 0%1 [%2]").arg(m_currentWave).arg(diffTag) : QString("MODE: %1").arg(m_mode.toUpper());
-    painter->setPen(m_isEndless ? (m_difficulty == 2 ? QColor(255, 51, 102) : QColor(255, 204, 0)) : ThemeManager::instance().getPrimaryColor());
+    QString modeTitle = m_isTimeAttack ? "MODE: TIME ATTACK" : (m_isEndless ? QString("WAVE 0%1").arg(m_currentWave) : QString("MODE: %1").arg(m_mode.toUpper()));
+    painter->setPen(m_isTimeAttack ? (m_chronoFreezeTimer > 0 ? QColor(0, 242, 254) : QColor(255, 204, 0)) : ThemeManager::instance().getPrimaryColor());
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
     painter->drawText(QRectF(20, 58, 120, 16), modeTitle);
 
@@ -3325,9 +3230,15 @@ void GameScene::drawLeftHUD(QPainter* painter) {
         int frac = static_cast<int>((m_timeRemaining - totalSec) * 10);
         QString timeStr = QString("%1:%2.%3").arg(mins, 2, 10, QChar('0')).arg(secs, 2, 10, QChar('0')).arg(frac);
 
-        QColor timerCol = (m_timeRemaining <= 10.0) ?
-                          ((std::fmod(t * 5.0, 1.0) < 0.5) ? QColor(239, 68, 68) : QColor(255, 255, 255)) :
-                          QColor(245, 158, 11);
+        QColor timerCol;
+        if (m_chronoFreezeTimer > 0.0) {
+            timerCol = QColor(0, 242, 254);
+            timeStr = QString("⏳ %1s").arg(m_chronoFreezeTimer, 0, 'f', 1);
+        } else if (m_timeRemaining <= 10.0) {
+            timerCol = (std::fmod(t * 5.0, 1.0) < 0.5) ? QColor(239, 68, 68) : QColor(255, 255, 255);
+        } else {
+            timerCol = QColor(245, 158, 11);
+        }
 
         painter->setPen(timerCol);
         painter->setFont(QFont("Consolas", 10, QFont::Bold));
@@ -3352,7 +3263,7 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->drawText(QRectF(150, 62, 50, 18), "ONLINE");
 
     QRectF statsCard(12, 108, 195, 295);
-    QColor statsBorder = (m_comboStreak >= 3) ? QColor(245, 158, 11, 160) : ((m_dangerLevel > 0.7) ? QColor(239, 68, 68, 160) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70));
+    QColor statsBorder = (m_chronoFreezeTimer > 0) ? QColor(0, 242, 254, 200) : ((m_comboStreak >= 3) ? QColor(245, 158, 11, 160) : ((m_dangerLevel > 0.7) ? QColor(239, 68, 68, 160) : QColor(ThemeManager::instance().getPrimaryColor().red(), ThemeManager::instance().getPrimaryColor().green(), ThemeManager::instance().getPrimaryColor().blue(), 70)));
     painter->setBrush(QColor(10, 16, 28, 145));
     painter->setPen(QPen(statsBorder, 1.2));
     painter->drawRoundedRect(statsCard, 8, 8);
@@ -3362,47 +3273,37 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
     painter->drawText(QRectF(22, 116, 100, 15), "LIVE SCORE");
 
-    painter->setPen((m_comboStreak >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+    painter->setPen((m_chronoFreezeTimer > 0) ? QColor(0, 242, 254) : ((m_comboStreak >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor()));
     painter->setFont(QFont("Consolas", 18, QFont::Bold));
     painter->drawText(QRectF(22, 130, 170, 26), scoreStr);
 
-    if (m_isEndless) {
+    if (m_isTimeAttack) {
+        painter->setPen(m_chronoFreezeTimer > 0 ? QColor(0, 242, 254) : QColor(148, 163, 184));
+        painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
+        QString subScore = (m_chronoFreezeTimer > 0) ? "⏳ 2X CHRONO BOOST ACTIVE" : QString("CHRONO MULTIPLIER: x%1").arg(m_scoreMultiplier, 0, 'f', 1);
+        painter->drawText(QRectF(22, 162, 170, 14), subScore);
+    } else if (m_isEndless) {
         painter->setPen(QColor(148, 163, 184));
         painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
         painter->drawText(QRectF(22, 162, 170, 14), QString("MISS: %1/%2 | MULT: x%3").arg(m_missedShotsCount).arg(m_maxMissedShots).arg(m_scoreMultiplier, 0, 'f', 1));
-
-        qreal totalBarW = 170.0;
-        qreal singleBarW = (totalBarW - (m_maxMissedShots - 1) * 4.0) / m_maxMissedShots;
-        for (int b = 0; b < m_maxMissedShots; ++b) {
-            QRectF barRect(22 + b * (singleBarW + 4.0), 178, singleBarW, 8);
-            if (b < m_missedShotsCount) {
-                painter->setBrush(QColor(239, 68, 68));
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(barRect, 2, 2);
-            } else {
-                painter->setBrush(QColor(30, 41, 59, 150));
-                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
-                painter->drawRoundedRect(barRect, 2, 2);
-            }
-        }
     } else {
         painter->setPen(QColor(148, 163, 184));
         painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
         painter->drawText(QRectF(22, 162, 170, 14), QString("OVERDRIVE STREAK (x%1)").arg(m_comboStreak));
+    }
 
-        int activeBars = std::min(m_comboStreak, 5);
-        for (int b = 0; b < 5; ++b) {
-            QRectF barRect(22 + b * 34, 178, 30, 8);
-            if (b < activeBars) {
-                QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
-                painter->setBrush(barCol);
-                painter->setPen(Qt::NoPen);
-                painter->drawRoundedRect(barRect, 2, 2);
-            } else {
-                painter->setBrush(QColor(30, 41, 59, 150));
-                painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
-                painter->drawRoundedRect(barRect, 2, 2);
-            }
+    int activeBars = std::min(m_comboStreak, 5);
+    for (int b = 0; b < 5; ++b) {
+        QRectF barRect(22 + b * 34, 178, 30, 8);
+        if (b < activeBars) {
+            QColor barCol = (activeBars >= 5) ? QColor(239, 68, 68) : ((activeBars >= 3) ? QColor(245, 158, 11) : ThemeManager::instance().getPrimaryColor());
+            painter->setBrush(barCol);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(barRect, 2, 2);
+        } else {
+            painter->setBrush(QColor(30, 41, 59, 150));
+            painter->setPen(QPen(QColor(71, 85, 105, 100), 1));
+            painter->drawRoundedRect(barRect, 2, 2);
         }
     }
 
@@ -3430,12 +3331,7 @@ void GameScene::drawLeftHUD(QPainter* painter) {
 
     painter->setPen(QColor(148, 163, 184));
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-    if (m_isEndless) {
-        qreal remTime = std::max(0.0, m_currentDropInterval - m_endlessRowTimer);
-        painter->drawText(QRectF(22, 264, 170, 14), QString("ROW ADVANCE IN: %1s").arg(remTime, 0, 'f', 1));
-    } else {
-        painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
-    }
+    painter->drawText(QRectF(22, 264, 170, 14), "GRID SPECTRUM RADAR");
 
     auto dist = m_grid.getColorDistribution();
     int totalBalls = 0;
@@ -3464,15 +3360,10 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     QString telemetry = QString("TRAJ: %1° | BNC: %2 | SECTOR: 01").arg(m_aimAngleTelemetry, 0, 'f', 1).arg(m_aimBouncesTelemetry);
     painter->drawText(QRectF(22, 305, 175, 18), telemetry);
 
-    // هشدارهای سایبری و هشدارهای اضطراب شلیک
-    if (m_isEndless && m_difficulty == 2 && m_panicTimer >= 4.5 && std::fmod(t * 8.0, 1.0) < 0.5) {
-        painter->setPen(QColor(255, 51, 102));
+    if (m_isTimeAttack && m_chronoFreezeTimer > 0.0) {
+        painter->setPen(QColor(0, 242, 254));
         painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
-        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⚠️ CANNON OVERHEATING! ⚠️");
-    } else if (m_emergencyPurgeReady && std::fmod(t * 4.0, 1.0) < 0.5) {
-        painter->setPen(QColor(239, 68, 68));
-        painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
-        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "☣ PURGE READY (HIT TOP) ☣");
+        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⏳ CHRONO FREEZE ENGAGED ⏳");
     } else if (m_dangerLevel > 0.7 && std::fmod(t * 3.0, 1.0) < 0.5) {
         painter->setPen(QColor(239, 68, 68));
         painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
@@ -3701,6 +3592,7 @@ private:
     void advanceEndlessRow();
     void triggerWaveEscalation();
     void addTimeBonus(qreal seconds, const QString& reason);
+    void triggerChronoFreeze(const QPointF& pos);
     void checkOverdriveTrigger(const QPointF& center);
     void executeEmergencyPurge(const QPointF& center);
 
@@ -3738,10 +3630,12 @@ private:
     int m_armedSkillIndex = -1;
     BallColor m_savedBaseColor = BallColor::None;
 
+    // متغیرهای Time Attack
     bool m_isTimeAttack = false;
     qreal m_timeRemaining = 75.0;
+    qreal m_chronoFreezeTimer = 0.0;
 
-    // پارامترهای سطح سختی
+    // متغیرهای Endless
     bool m_isEndless = false;
     int m_currentWave = 1;
     qreal m_waveTimer = 0.0;

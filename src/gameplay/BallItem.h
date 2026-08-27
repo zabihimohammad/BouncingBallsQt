@@ -16,6 +16,9 @@ public:
              bool isMystery = false,
              bool isKey = false,
              BallType containedSkill = BallType::Regular,
+             bool isTimeCrystal = false,
+             bool isChronoBomb = false,
+             qreal chronoTimer = 5.0,
              QGraphicsItem* parent = nullptr);
 
     BallItem(const Ball* ball, qreal radius = GridManager::BALL_RADIUS, QGraphicsItem* parent = nullptr);
@@ -30,7 +33,10 @@ public:
                     int freezeLevel = 0,
                     bool isMystery = false,
                     bool isKey = false,
-                    BallType containedSkill = BallType::Regular);
+                    BallType containedSkill = BallType::Regular,
+                    bool isTimeCrystal = false,
+                    bool isChronoBomb = false,
+                    qreal chronoTimer = 5.0);
 
     static void paintBall(QPainter* painter,
                           const QPointF& center,
@@ -42,7 +48,10 @@ public:
                           int freezeLevel = 0,
                           bool isMystery = false,
                           bool isKey = false,
-                          BallType containedSkill = BallType::Regular);
+                          BallType containedSkill = BallType::Regular,
+                          bool isTimeCrystal = false,
+                          bool isChronoBomb = false,
+                          qreal chronoTimer = 5.0);
 
 private:
     BallColor m_color;
@@ -54,4 +63,7 @@ private:
     bool m_isMystery;
     bool m_isKey;
     BallType m_containedSkill;
+    bool m_isTimeCrystal;
+    bool m_isChronoBomb;
+    qreal m_chronoTimer;
 };

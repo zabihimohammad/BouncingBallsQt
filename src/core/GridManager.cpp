@@ -120,7 +120,7 @@ void GridManager::loadLevel(int levelNumber) {
     }
 }
 
-void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChance, bool seedHazards) {
+void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChance, bool seedHazards, bool seedTimeCrystals, bool seedChronoBombs) {
     clearGrid();
     auto rng = QRandomGenerator::global();
     bool hasLockedBall = false;
@@ -145,6 +145,13 @@ void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChanc
                     newBall->setLocked(true);
                     hasLockedBall = true;
                 }
+            } else if (seedTimeCrystals && r >= 1) {
+                int roll = rng->bounded(100);
+                if (roll < 12) {
+                    newBall->setTimeCrystal(true);
+                } else if (seedChronoBombs && roll < 22) {
+                    newBall->setChronoBomb(true, 5.0);
+                }
             }
 
             m_grid[r][c] = newBall;
@@ -164,6 +171,22 @@ void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChanc
             keyBall->setPrimaryColor(BallColor::Yellow);
         }
     }
+}
+
+std::vector<std::pair<int, int>> GridManager::updateChronoBombs(qreal dt) {
+    std::vector<std::pair<int, int>> expired;
+    for (int r = 0; r < ROWS; ++r) {
+        int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid[r][c] && m_grid[r][c]->isChronoBomb()) {
+                m_grid[r][c]->tickChronoBomb(dt);
+                if (m_grid[r][c]->isChronoBombExpired()) {
+                    expired.push_back({r, c});
+                }
+            }
+        }
+    }
+    return expired;
 }
 
 void GridManager::addRowFromTop(int wave, int colorCount, int clusterChance) {

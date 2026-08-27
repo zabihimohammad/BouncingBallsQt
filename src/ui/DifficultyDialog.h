@@ -17,7 +17,7 @@ struct DiffOption {
 class DifficultyDialog : public QDialog {
 Q_OBJECT
 public:
-    explicit DifficultyDialog(QWidget* parent = nullptr);
+    explicit DifficultyDialog(const QString& modeName = "ENDLESS", QWidget* parent = nullptr);
     int getSelectedDifficulty() const { return m_selectedDifficulty; }
 
 signals:
@@ -30,6 +30,7 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    QString m_modeName;
     int m_selectedDifficulty = 1;
     int m_hoveredIndex = -1;
     QPointF m_mousePos;

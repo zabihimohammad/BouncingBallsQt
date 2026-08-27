@@ -91,13 +91,20 @@ void MainWindow::handleLaunchRequest(const QString& username, const QString& mod
     if (mode.compare("Classic", Qt::CaseInsensitive) == 0) {
         m_stackedWidget->setCurrentIndex(6);
     } else if (mode.compare("Endless", Qt::CaseInsensitive) == 0) {
-        // باز شدن دیالوگ هولوگرافیک انتخاب ۳ سطح سختی
-        auto diffDlg = new DifficultyDialog(this);
+        auto diffDlg = new DifficultyDialog("ENDLESS", this);
         diffDlg->setAttribute(Qt::WA_DeleteOnClose);
         if (diffDlg->exec() == QDialog::Accepted) {
             m_selectedDifficulty = diffDlg->getSelectedDifficulty();
             QString diffName = (m_selectedDifficulty == 0) ? "Cadet" : ((m_selectedDifficulty == 2) ? "Cyber-God" : "Veteran");
             startNewGame(username, QString("Endless [%1]").arg(diffName), 1, m_selectedDifficulty);
+        }
+    } else if (mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || mode.contains("Time", Qt::CaseInsensitive)) {
+        auto diffDlg = new DifficultyDialog("TIME ATTACK", this);
+        diffDlg->setAttribute(Qt::WA_DeleteOnClose);
+        if (diffDlg->exec() == QDialog::Accepted) {
+            m_selectedDifficulty = diffDlg->getSelectedDifficulty();
+            QString diffName = (m_selectedDifficulty == 0) ? "Cadet" : ((m_selectedDifficulty == 2) ? "Cyber-God" : "Veteran");
+            startNewGame(username, QString("Time Attack [%1]").arg(diffName), 1, m_selectedDifficulty);
         }
     } else {
         startNewGame(username, mode, 1, 1);

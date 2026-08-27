@@ -18,7 +18,8 @@ enum class BallType {
     DualColor,
     Rainbow,
     Bomb,
-    Laser
+    Laser,
+    PhotonBeam
 };
 
 class Ball {
@@ -53,7 +54,23 @@ public:
     bool isKey() const { return m_isKey; }
     void setKey(bool key) { m_isKey = key; }
 
-    // جعبه مهمات مداری (Supply Drop)
+    // ۱. کریستال انجماد زمان (Time Crystal)
+    bool isTimeCrystal() const { return m_isTimeCrystal; }
+    void setTimeCrystal(bool tc) { m_isTimeCrystal = tc; }
+
+    // ۲. بمب ساعتی زمان‌دار (Chrono Bomb)
+    bool isChronoBomb() const { return m_isChronoBomb; }
+    void setChronoBomb(bool cb, qreal timer = 5.0) { m_isChronoBomb = cb; m_chronoBombTimer = timer; }
+    qreal getChronoBombTimer() const { return m_chronoBombTimer; }
+    void tickChronoBomb(qreal dt) {
+        if (m_isChronoBomb && m_chronoBombTimer > 0.0) {
+            m_chronoBombTimer -= dt;
+            if (m_chronoBombTimer < 0.0) m_chronoBombTimer = 0.0;
+        }
+    }
+    bool isChronoBombExpired() const { return m_isChronoBomb && m_chronoBombTimer <= 0.0; }
+
+    // ۳. جعبه مهمات مداری (Supply Drop)
     BallType getContainedSkill() const { return m_containedSkill; }
     void setContainedSkill(BallType skill) { m_containedSkill = skill; }
     bool hasContainedSkill() const { return m_containedSkill != BallType::Regular; }
@@ -91,6 +108,9 @@ private:
     int m_col;
     bool m_isLocked;
     bool m_isKey = false;
+    bool m_isTimeCrystal = false;
+    bool m_isChronoBomb = false;
+    qreal m_chronoBombTimer = 5.0;
     int m_freezeLevel = 0;
     bool m_isMystery = false;
     BallType m_containedSkill = BallType::Regular;

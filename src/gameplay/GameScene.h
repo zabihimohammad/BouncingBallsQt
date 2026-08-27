@@ -100,6 +100,7 @@ private:
     void advanceEndlessRow();
     void triggerWaveEscalation();
     void addTimeBonus(qreal seconds, const QString& reason);
+    void triggerChronoFreeze(const QPointF& pos, int crystalCount = 1);
     void checkOverdriveTrigger(const QPointF& center);
     void executeEmergencyPurge(const QPointF& center);
 
@@ -137,10 +138,13 @@ private:
     int m_armedSkillIndex = -1;
     BallColor m_savedBaseColor = BallColor::None;
 
+    // متغیرهای اختصاصی Time Attack
     bool m_isTimeAttack = false;
-    qreal m_timeRemaining = 75.0;
+    qreal m_timeRemaining = 60.0;
+    qreal m_chronoFreezeTimer = 0.0;
+    qreal m_timeDrainRate = 1.0;
 
-    // پارامترهای سطح سختی
+    // متغیرهای اختصاصی Endless
     bool m_isEndless = false;
     int m_currentWave = 1;
     qreal m_waveTimer = 0.0;

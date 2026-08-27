@@ -4,15 +4,24 @@
 #include <QMouseEvent>
 #include <QLinearGradient>
 
-DifficultyDialog::DifficultyDialog(QWidget* parent) : QDialog(parent) {
+DifficultyDialog::DifficultyDialog(const QString& modeName, QWidget* parent)
+        : QDialog(parent), m_modeName(modeName) {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Dialog);
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedSize(580, 520);
     setMouseTracking(true);
 
-    m_options.append({0, "CADET PROTOCOL", "EASY // SAFE OPERATION", "4 Colors | 16s Descent | 5 Misses | 2-Bounce Aim | 3x Ammo", "x1.0 SCORE", QColor(51, 255, 153), QRectF()});
-    m_options.append({1, "VETERAN PROTOCOL", "NORMAL // TACTICAL CHALLENGE", "5 Colors | 12s Descent | 3 Misses | 1-Bounce Aim | 2x Ammo", "x1.75 SCORE", QColor(0, 242, 254), QRectF()});
-    m_options.append({2, "CYBER-GOD PROTOCOL", "EXTREME // APEX SURVIVAL", "Pre-seeded Hazards | 8s Descent | 2 Misses | 1-Bounce Aim | 6s Panic Clock", "x3.0 SCORE", QColor(255, 51, 102), QRectF()});
+    bool isTime = (m_modeName.contains("Time", Qt::CaseInsensitive));
+
+    if (isTime) {
+        m_options.append({0, "CADET PROTOCOL", "EASY // SAFE ENGAGEMENT", "60s Initial Clock | 4 Colors | Standard Drain | 2-Bounce Aim", "x1.0 SCORE", QColor(51, 255, 153), QRectF()});
+        m_options.append({1, "VETERAN PROTOCOL", "NORMAL // TACTICAL ATTACK", "45s Initial Clock | 5 Colors | +5% Drain Rate | 1-Bounce Aim", "x1.75 SCORE", QColor(0, 242, 254), QRectF()});
+        m_options.append({2, "CYBER-GOD PROTOCOL", "EXTREME // CHRONO CRISIS", "30s Initial Clock | Pre-seeded Hazards | +25% Drain Rate | 1-Bounce Aim", "x3.0 SCORE", QColor(255, 51, 102), QRectF()});
+    } else {
+        m_options.append({0, "CADET PROTOCOL", "EASY // SAFE OPERATION", "4 Colors | 16s Descent | 5 Misses | 2-Bounce Aim | 3x Ammo", "x1.0 SCORE", QColor(51, 255, 153), QRectF()});
+        m_options.append({1, "VETERAN PROTOCOL", "NORMAL // TACTICAL CHALLENGE", "5 Colors | 12s Descent | 3 Misses | 1-Bounce Aim | 2x Ammo", "x1.75 SCORE", QColor(0, 242, 254), QRectF()});
+        m_options.append({2, "CYBER-GOD PROTOCOL", "EXTREME // APEX SURVIVAL", "Pre-seeded Hazards | 8s Descent | 2 Misses | 1-Bounce Aim | 6s Panic Clock", "x3.0 SCORE", QColor(255, 51, 102), QRectF()});
+    }
 }
 
 void DifficultyDialog::resizeEvent(QResizeEvent* event) {
@@ -74,11 +83,11 @@ void DifficultyDialog::paintEvent(QPaintEvent* event) {
 
     painter.setPen(QColor(0, 242, 254));
     painter.setFont(QFont("Consolas", 18, QFont::Bold));
-    painter.drawText(QRectF(0, 30, width(), 30), Qt::AlignCenter, "SELECT COMBAT SEVERITY");
+    painter.drawText(QRectF(0, 30, width(), 30), Qt::AlignCenter, QString("SELECT %1 SEVERITY").arg(m_modeName.toUpper()));
 
     painter.setPen(QColor(148, 163, 184));
     painter.setFont(QFont("Consolas", 9));
-    painter.drawText(QRectF(0, 65, width(), 20), Qt::AlignCenter, "Configure Endless Simulation parameters & reward multipliers");
+    painter.drawText(QRectF(0, 65, width(), 20), Qt::AlignCenter, "Configure deployment parameters & reward multipliers");
 
     for (int i = 0; i < m_options.size(); ++i) {
         const auto& opt = m_options[i];

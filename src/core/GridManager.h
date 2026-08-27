@@ -23,8 +23,10 @@ public:
     void initGrid();
     void clearGrid();
     void loadLevel(int levelNumber);
-    void generateRandomLevel(int rows = 5, int colorCount = 5, int clusterChance = 50, bool seedHazards = false);
+    void generateRandomLevel(int rows = 5, int colorCount = 5, int clusterChance = 50, bool seedHazards = false, bool seedTimeCrystals = false, bool seedChronoBombs = false);
     void addRowFromTop(int wave = 1, int colorCount = 5, int clusterChance = 50);
+
+    std::vector<std::pair<int, int>> updateChronoBombs(qreal dt);
 
     bool isOccupied(int r, int c) const;
     Ball* getBall(int r, int c);
