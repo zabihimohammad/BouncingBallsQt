@@ -23,12 +23,8 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private slots:
-    // ۱. متد بررسی درخواست شروع بازی و تفکیک انتخاب مرحله
     void handleLaunchRequest(const QString& username, const QString& mode);
-
-    // ۲. متد شروع بازی با پشتیبانی از شماره مرحله (پیش‌فرض = ۱)
-    void startNewGame(const QString& username, const QString& mode, int levelNumber = 1);
-
+    void startNewGame(const QString& username, const QString& mode, int levelNumber = 1, int difficulty = 1);
     void handleGameOver(int score);
     void handleGameWon(int score);
     void showPauseMenu();
@@ -51,4 +47,5 @@ private:
     QString m_currentUser;
     QString m_currentMode;
     int m_selectedLevel = 1;
+    int m_selectedDifficulty = 1;
 };

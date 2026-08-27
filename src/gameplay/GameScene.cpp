@@ -10,11 +10,12 @@
 #include <set>
 #include <algorithm>
 
-GameScene::GameScene(const QString& username, const QString& mode, int levelNumber, QObject* parent)
+GameScene::GameScene(const QString& username, const QString& mode, int levelNumber, int difficulty, QObject* parent)
         : QGraphicsScene(0, 0, SCENE_W, SCENE_H, parent),
           m_username(username),
           m_mode(mode),
-          m_levelNumber(levelNumber) {
+          m_levelNumber(levelNumber),
+          m_difficulty(difficulty) {
     initGame();
 }
 
@@ -25,27 +26,70 @@ GameScene::~GameScene() {
 }
 
 void GameScene::initGame() {
-    initSkills();
-
     m_isTimeAttack = (m_mode.compare("TIME_ATTACK", Qt::CaseInsensitive) == 0 || m_mode.compare("Time", Qt::CaseInsensitive) == 0);
-    m_isEndless = (m_mode.compare("ENDLESS", Qt::CaseInsensitive) == 0);
+    m_isEndless = (m_mode.compare("ENDLESS", Qt::CaseInsensitive) == 0 || m_mode.contains("Endless", Qt::CaseInsensitive));
 
     m_timeRemaining = 75.0;
     m_currentWave = 1;
     m_waveTimer = 0.0;
-    m_currentDropInterval = 14.0;
-    m_maxMissedShots = 4;
-    m_missedShotsCount = 0;
     m_endlessRowTimer = 0.0;
     m_dangerTelegraph = false;
+    m_multiplierDecayTimer = 0.0;
+    m_isOverdrive = false;
+    m_overdriveTimer = 0.0;
+    m_panicTimer = 0.0;
+    m_emergencyPurgeReady = false;
+    m_purgeCooldown = 0.0;
+    m_empEventTimer = 0.0;
+    m_empSurgeActive = false;
+    m_empSurgeDuration = 0.0;
 
-    if (m_isEndless || m_mode.compare("Random", Qt::CaseInsensitive) == 0 || m_mode.compare("CHAOS", Qt::CaseInsensitive) == 0) {
-        m_grid.generateRandomLevel();
+    initSkills();
+
+    int startRows = 5;
+    bool seedHazards = false;
+
+    if (m_isEndless) {
+        if (m_difficulty == 0) { // Cadet (Easy)
+            m_currentDropInterval = 16.0;
+            m_maxMissedShots = 5;
+            m_maxAimBounces = 2;
+            m_baseScoreMultiplier = 1.0;
+            m_scoreMultiplier = 1.0;
+            m_activeColorsCount = 4;
+            m_clusterChance = 50;
+            startRows = 4;
+            seedHazards = false;
+        } else if (m_difficulty == 1) { // Veteran (Normal)
+            m_currentDropInterval = 12.0;
+            m_maxMissedShots = 3;
+            m_maxAimBounces = 1;
+            m_baseScoreMultiplier = 1.75;
+            m_scoreMultiplier = 1.75;
+            m_activeColorsCount = 5;
+            m_clusterChance = 25;
+            startRows = 5;
+            seedHazards = false;
+        } else { // Cyber-God (Extreme)
+            m_currentDropInterval = 8.0;
+            m_maxMissedShots = 2;
+            m_maxAimBounces = 1;
+            m_baseScoreMultiplier = 3.0;
+            m_scoreMultiplier = 3.0;
+            m_activeColorsCount = 5;
+            m_clusterChance = 10;
+            startRows = 6;
+            seedHazards = true;
+        }
+        m_grid.generateRandomLevel(startRows, m_activeColorsCount, m_clusterChance, seedHazards);
+    } else if (m_mode.compare("Random", Qt::CaseInsensitive) == 0 || m_mode.compare("CHAOS", Qt::CaseInsensitive) == 0) {
+        m_grid.generateRandomLevel(5, 5, 25, false);
     } else {
         m_grid.loadLevel(m_levelNumber);
     }
 
     m_aimLine = new AimLineItem(PLAYFIELD_X, PLAYFIELD_X + PLAYFIELD_W, SCENE_H, GridManager::BALL_RADIUS);
+    m_aimLine->setMaxBounces(m_maxAimBounces);
     addItem(m_aimLine);
 
     m_cannon = new CannonItem(PLAYFIELD_W, SCENE_H);
@@ -75,10 +119,11 @@ void GameScene::initGame() {
 
 void GameScene::initSkills() {
     m_skills.clear();
-    m_skills.append({BallType::Bomb, "BOMB", "Explodes 3x3 Area", QColor(231, 76, 60), 2, QRectF(595, 140, 185, 80)});
-    m_skills.append({BallType::Laser, "LASER BEAM", "Clears Target Row", ThemeManager::instance().getPrimaryColor(), 2, QRectF(595, 235, 185, 80)});
-    m_skills.append({BallType::Rainbow, "RAINBOW", "Wildcard Cascade", QColor(255, 204, 0), 2, QRectF(595, 330, 185, 80)});
-    m_skills.append({BallType::DualColor, "DUAL ORB", "Splits Two Colors", QColor(165, 94, 234), 3, QRectF(595, 425, 185, 80)});
+    int skillCount = (m_difficulty == 0) ? 3 : ((m_difficulty == 2) ? 1 : 2);
+    m_skills.append({BallType::Bomb, "BOMB", "Explodes 3x3 Area", QColor(231, 76, 60), skillCount, QRectF(595, 140, 185, 80)});
+    m_skills.append({BallType::Laser, "LASER BEAM", "Clears Target Row", ThemeManager::instance().getPrimaryColor(), skillCount, QRectF(595, 235, 185, 80)});
+    m_skills.append({BallType::Rainbow, "RAINBOW", "Wildcard Cascade", QColor(255, 204, 0), skillCount, QRectF(595, 330, 185, 80)});
+    m_skills.append({BallType::DualColor, "DUAL ORB", "Splits Two Colors", QColor(165, 94, 234), skillCount + 1, QRectF(595, 425, 185, 80)});
 }
 
 void GameScene::addSkillAmmo(BallType skillType, int amount) {
@@ -108,7 +153,7 @@ void GameScene::prepareNextCannonBall() {
         int idx = QRandomGenerator::global()->bounded(static_cast<int>(availableColors.size()));
         chosenColor = availableColors[idx];
     } else {
-        chosenColor = Ball::getRandomColor(5);
+        chosenColor = Ball::getRandomColor(m_activeColorsCount);
     }
 
     m_cannon->setNextBall(chosenColor, BallType::Regular);
@@ -168,8 +213,8 @@ void GameScene::armSkill(int index) {
             c1 = rem[0];
             c2 = (c1 == BallColor::Red) ? BallColor::Blue : BallColor::Red;
         } else {
-            c1 = Ball::getRandomColor(5);
-            do { c2 = Ball::getRandomColor(5); } while (c2 == c1);
+            c1 = Ball::getRandomColor(m_activeColorsCount);
+            do { c2 = Ball::getRandomColor(m_activeColorsCount); } while (c2 == c1);
         }
         m_cannon->setCurrentBall(c1, BallType::DualColor, c2);
     } else {
@@ -199,10 +244,59 @@ void GameScene::addTimeBonus(qreal seconds, const QString& reason) {
     spawnFloatingText(hudPos, QString("+%1s %2").arg(static_cast<int>(seconds)).arg(reason), QColor(255, 204, 0));
 }
 
+void GameScene::checkOverdriveTrigger(const QPointF& center) {
+    if (!m_isOverdrive) {
+        m_isOverdrive = true;
+        m_overdriveTimer = OVERDRIVE_DURATION;
+        m_cannon->setOverdrive(true);
+        emit shakeRequested(18);
+        SoundManager::instance().playWin();
+        m_shockwaves.append({center, 40.0, 1.0, QColor(255, 204, 0)});
+        spawnPopParticles(center, QColor(255, 100, 0), 45);
+        spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 180), "⚡ OVERDRIVE ENGAGED! ⚡", QColor(255, 204, 0));
+    } else {
+        m_overdriveTimer = std::min(8.0, m_overdriveTimer + 1.8);
+        spawnFloatingText(center, "+OVERDRIVE BOOST!", QColor(255, 204, 0));
+    }
+}
+
+void GameScene::executeEmergencyPurge(const QPointF& center) {
+    m_emergencyPurgeReady = false;
+    m_purgeCooldown = 25.0;
+
+    emit shakeRequested(24);
+    SoundManager::instance().playWin();
+    m_shockwaves.append({center, 80.0, 1.0, QColor(239, 68, 68)});
+
+    int destroyedCount = 0;
+    for (int r = GridManager::ROWS - 1; r >= GridManager::ROWS - 3; --r) {
+        int cols = (r % 2 == 0) ? GridManager::COLS_EVEN : GridManager::COLS_ODD;
+        for (int c = 0; c < cols; ++c) {
+            if (m_grid.isOccupied(r, c)) {
+                QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
+                spawnPopParticles(pCenter, QColor(239, 68, 68), 18);
+                m_grid.removeBall(r, c);
+                destroyedCount++;
+            }
+        }
+    }
+
+    int purgeScore = static_cast<int>(destroyedCount * 50 * m_scoreMultiplier);
+    m_score += purgeScore;
+    spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 320),
+                      QString("☣ EMERGENCY PURGE: +%1 PTS! ☣").arg(purgeScore),
+                      QColor(239, 68, 68));
+
+    checkFloatingBalls();
+    redrawGrid();
+    syncCannonColorsWithGrid();
+}
+
 void GameScene::triggerWaveEscalation() {
     m_currentWave++;
-    m_currentDropInterval = std::max(6.0, 14.0 - (m_currentWave - 1) * 1.5);
-    m_maxMissedShots = std::max(2, 4 - (m_currentWave / 3));
+    qreal step = (m_difficulty == 2) ? 1.8 : 1.2;
+    m_currentDropInterval = std::max(5.0, m_currentDropInterval - step);
+    m_maxMissedShots = std::max(2, m_maxMissedShots - 1);
     m_waveTimer = 0.0;
 
     emit shakeRequested(16);
@@ -213,7 +307,7 @@ void GameScene::triggerWaveEscalation() {
 }
 
 void GameScene::advanceEndlessRow() {
-    m_grid.addRowFromTop(m_currentWave);
+    m_grid.addRowFromTop(m_currentWave, m_activeColorsCount, m_clusterChance);
     m_missedShotsCount = 0;
     m_endlessRowTimer = 0.0;
     m_dangerTelegraph = false;
@@ -354,6 +448,7 @@ void GameScene::keyPressEvent(QKeyEvent* event) {
 
 void GameScene::fireBall() {
     m_isFlying = true;
+    m_panicTimer = 0.0;
     m_aimLine->clearAim();
     m_cannon->triggerFireRecoil();
 
@@ -371,8 +466,8 @@ void GameScene::fireBall() {
     }
 
     qreal rad = m_cannon->getAngle() * M_PI / 180.0;
-    qreal speed = 15.0;
-    m_flyingVel = QPointF(std::cos(rad) * speed, -std::sin(rad) * speed);
+    qreal baseSpeed = m_isOverdrive ? 20.0 : (m_empSurgeActive ? 22.0 : 15.0);
+    m_flyingVel = QPointF(std::cos(rad) * baseSpeed, -std::sin(rad) * baseSpeed);
 
     m_flyingBallItem->setPos(m_flyingPos);
     m_flyingBallItem->updateData(m_flyingColor, m_flyingType, m_flyingSecondaryColor, false);
@@ -392,7 +487,54 @@ void GameScene::updateGameLoop() {
     m_displayedScore += (m_score - m_displayedScore) * 0.15;
     if (std::abs(m_score - m_displayedScore) < 0.5) m_displayedScore = m_score;
 
-    // ۱. تایمر Time Attack
+    // ۱. تایمر اضطراب شلیک خودکار (Panic Clock) در سختی Cyber-God
+    if (m_isEndless && m_difficulty == 2 && !m_isFlying) {
+        m_panicTimer += 0.016;
+        if (m_panicTimer >= 6.0) {
+            fireBall();
+            spawnFloatingText(m_cannon->pos() - QPointF(0, 30), "⚠️ FORCED OVERHEAT DISCHARGE!", QColor(255, 51, 102));
+        }
+    }
+
+    // ۲. استهلاک ضریب امتیازدهی
+    m_multiplierDecayTimer += 0.016;
+    if (m_multiplierDecayTimer >= 8.0) {
+        m_scoreMultiplier = std::max(m_baseScoreMultiplier, m_scoreMultiplier - 0.2);
+        m_multiplierDecayTimer = 6.0;
+    }
+
+    // ۳. تایمر حالت بیش‌فعال (Overdrive)
+    if (m_isOverdrive) {
+        m_overdriveTimer -= 0.016;
+        if (m_overdriveTimer <= 0.0) {
+            m_isOverdrive = false;
+            m_overdriveTimer = 0.0;
+            m_cannon->setOverdrive(false);
+            spawnFloatingText(m_cannon->pos() - QPointF(0, 40), "OVERDRIVE DEPLETED", QColor(148, 163, 184));
+        }
+    }
+
+    // ۴. رخداد سایبری ناهنجاری EMP Surge
+    m_empEventTimer += 0.016;
+    if (m_empEventTimer >= 40.0) {
+        m_empEventTimer = 0.0;
+        m_empSurgeActive = true;
+        m_empSurgeDuration = 5.0;
+        SoundManager::instance().playWin();
+        emit shakeRequested(10);
+        spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 200),
+                          "⚡ EMP SURGE: VELOCITY OVERCLOCKED! ⚡",
+                          ThemeManager::instance().getPrimaryColor());
+    }
+
+    if (m_empSurgeActive) {
+        m_empSurgeDuration -= 0.016;
+        if (m_empSurgeDuration <= 0.0) {
+            m_empSurgeActive = false;
+        }
+    }
+
+    // ۵. منطق Time Attack
     if (m_isTimeAttack) {
         m_timeRemaining -= 0.016;
         if (m_timeRemaining <= 0.0) {
@@ -404,7 +546,7 @@ void GameScene::updateGameLoop() {
         }
     }
 
-    // ۲. سیستم امواج تصاعدی Endless
+    // ۶. سیستم امواج Endless
     if (m_isEndless) {
         m_waveTimer += 0.016;
         if (m_waveTimer >= 45.0) {
@@ -417,8 +559,13 @@ void GameScene::updateGameLoop() {
         if (m_endlessRowTimer >= m_currentDropInterval) {
             advanceEndlessRow();
         }
+
+        if (m_purgeCooldown > 0.0) {
+            m_purgeCooldown -= 0.016;
+        }
     }
 
+    // محاسبه سطح خطر زمین
     int lowestRow = 0;
     for (int r = GridManager::ROWS - 1; r >= 0; --r) {
         bool rowHasBall = false;
@@ -430,6 +577,14 @@ void GameScene::updateGameLoop() {
     }
     m_dangerLevel = static_cast<qreal>(lowestRow) / (GridManager::ROWS - 2.0);
     if (m_dangerLevel > 1.0) m_dangerLevel = 1.0;
+
+    if (m_isEndless && m_dangerLevel >= 0.80 && m_purgeCooldown <= 0.0 && !m_emergencyPurgeReady) {
+        m_emergencyPurgeReady = true;
+        SoundManager::instance().playPop();
+        spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 240),
+                          "☣ EMERGENCY PURGE READY! (HIT TOP ROW) ☣",
+                          QColor(239, 68, 68));
+    }
 
     m_lowestGridY = lowestRow * GridManager::BALL_DIAMETER;
     m_ecgPhase += (m_dangerLevel > 0.6 ? 0.3 : 0.08);
@@ -557,7 +712,11 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
         QPointF worldCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(r, c);
         bool hitSuccessful = false;
 
-        // ۱. اثر بمب
+        if (m_isEndless && m_emergencyPurgeReady && r <= 1) {
+            executeEmergencyPurge(worldCenter);
+            return;
+        }
+
         if (type == BallType::Bomb) {
             auto exploded = m_grid.explodeBomb(r, c);
             for (const auto& p : exploded) {
@@ -570,7 +729,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 }
 
                 m_grid.removeBall(p.first, p.second);
-                m_score += 30;
+                m_score += static_cast<int>(30 * m_scoreMultiplier);
             }
             m_shockwaves.append({worldCenter, 25.0, 1.0, QColor(231, 76, 60)});
             emit shakeRequested(12);
@@ -581,9 +740,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             addTimeBonus(3.0, "BOOM!");
             m_grid.damageNeighbors(r, c, true);
             hitSuccessful = true;
-        }
-            // ۲. اثر لیزر
-        else if (type == BallType::Laser) {
+        } else if (type == BallType::Laser) {
             int targetRow = r - 1;
             if (targetRow >= 0) {
                 triggerLaserBeamEffect(targetRow);
@@ -599,7 +756,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                         }
 
                         m_grid.removeBall(targetRow, colIdx);
-                        m_score += 25;
+                        m_score += static_cast<int>(25 * m_scoreMultiplier);
                     }
                 }
                 spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, targetRow * 38.0 + 20.0),
@@ -611,9 +768,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             m_comboStreak++;
             addTimeBonus(3.0, "LASER!");
             hitSuccessful = true;
-        }
-            // ۳. اثر رنگین‌کمان
-        else if (type == BallType::Rainbow) {
+        } else if (type == BallType::Rainbow) {
             std::set<BallColor> touchedColors;
             for (const auto& nb : m_grid.getNeighbors(r, c)) {
                 if (m_grid.isOccupied(nb.first, nb.second)) {
@@ -634,6 +789,10 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 }
             }
 
+            for (const auto& p : totalMatches) {
+                m_grid.damageNeighbors(p.first, p.second, isKeyBall);
+            }
+
             int count = 0;
             for (const auto& p : totalMatches) {
                 if (m_grid.isOccupied(p.first, p.second)) {
@@ -650,7 +809,7 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
                 }
             }
 
-            int pts = count * 35;
+            int pts = static_cast<int>(count * 35 * m_scoreMultiplier);
             m_score += pts;
             m_shockwaves.append({worldCenter, 20.0, 1.0, QColor(255, 204, 0)});
             spawnFloatingText(worldCenter, QString("+%1 RAINBOW CASCADE!").arg(pts), QColor(255, 204, 0));
@@ -658,13 +817,13 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             m_shotsHit++;
             m_comboStreak++;
             addTimeBonus(4.0, "CASCADE!");
-            m_grid.damageNeighbors(r, c, isKeyBall);
             hitSuccessful = true;
-        }
-            // ۴. تطبیق ۳تایی استاندارد یا دو رنگ
-        else {
+        } else {
             hitSuccessful = popMatches(r, c, color, type, m_flyingSecondaryColor);
-            m_grid.damageNeighbors(r, c, isKeyBall);
+        }
+
+        if (m_comboStreak >= 5) {
+            checkOverdriveTrigger(worldCenter);
         }
 
         if (m_isEndless) {
@@ -691,18 +850,18 @@ void GameScene::snapBallToGrid(const QPointF& hitPos, BallColor color, BallType 
             emit gameOver(m_score);
         } else if (m_grid.isCleared()) {
             if (m_isEndless) {
-                m_score += 500;
+                m_score += static_cast<int>(500 * m_scoreMultiplier);
                 emit scoreChanged(m_score);
                 SoundManager::instance().playWin();
-                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300), "★ BOARD PURGED! +500 PTS ★", QColor(0, 242, 254));
+                spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300), "★ BOARD PURGED! ★", QColor(0, 242, 254));
 
                 m_currentWave++;
-                m_currentDropInterval = std::max(6.0, 14.0 - (m_currentWave - 1) * 1.5);
-                m_maxMissedShots = std::max(2, 4 - (m_currentWave / 3));
+                m_currentDropInterval = std::max(5.0, m_currentDropInterval - 1.2);
+                m_maxMissedShots = std::max(2, m_maxMissedShots - 1);
                 m_endlessRowTimer = 0.0;
                 m_missedShotsCount = 0;
 
-                m_grid.generateRandomLevel();
+                m_grid.generateRandomLevel(5, m_activeColorsCount, m_clusterChance, (m_difficulty == 2));
                 redrawGrid();
                 syncCannonColorsWithGrid();
 
@@ -724,8 +883,22 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
         SoundManager::instance().playPop();
         m_shotsHit++;
         m_comboStreak++;
+
+        m_scoreMultiplier = std::min(5.0, m_scoreMultiplier + 0.15);
+        m_multiplierDecayTimer = 0.0;
+
         int comboBonus = m_comboStreak * 10;
         int totalGained = 0;
+
+        bool keyPopped = false;
+        for (const auto& p : matches) {
+            Ball* b = m_grid.getBall(p.first, p.second);
+            if (b && b->isKey()) keyPopped = true;
+        }
+
+        for (const auto& p : matches) {
+            m_grid.damageNeighbors(p.first, p.second, keyPopped);
+        }
 
         for (const auto& p : matches) {
             QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
@@ -737,7 +910,7 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
             }
 
             m_grid.removeBall(p.first, p.second);
-            int pts = 20 + comboBonus;
+            int pts = static_cast<int>((20 + comboBonus) * m_scoreMultiplier);
             m_score += pts;
             totalGained += pts;
         }
@@ -763,39 +936,6 @@ bool GameScene::popMatches(int r, int c, BallColor color, BallType type, BallCol
     }
 }
 
-void GameScene::checkFloatingBalls() {
-    auto floating = m_grid.findFloatingBalls();
-    if (!floating.empty()) {
-        int dropScore = 0;
-        int floatCount = floating.size();
-
-        for (const auto& p : floating) {
-            QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
-            spawnPopParticles(pCenter, QColor(148, 163, 184), 16);
-
-            Ball* b = m_grid.getBall(p.first, p.second);
-            if (b && b->hasContainedSkill()) {
-                addSkillAmmo(b->getContainedSkill());
-            }
-
-            m_grid.removeBall(p.first, p.second);
-            m_score += 50;
-            dropScore += 50;
-        }
-
-        addTimeBonus(3.0, "FALL BONUS!");
-        spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300),
-                          QString("+%1 FALL BONUS!").arg(dropScore), QColor(16, 185, 129));
-
-        // پاداش پرتاب خوشه‌های بزرگ (بیش از ۵ گوی معلق)
-        if (floatCount >= 5) {
-            grantRandomSupplyDrop();
-            spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 260),
-                              "★ SUPPLY AIRDROP REWARDED! ★", QColor(255, 204, 0));
-        }
-    }
-}
-
 void GameScene::redrawGrid() {
     for (auto* item : items()) {
         if (item->data(0).toString() == "grid_ball") {
@@ -818,18 +958,40 @@ void GameScene::redrawGrid() {
                 addItem(ballItem);
                 ballItem->setZValue(1);
                 ballItem->setData(0, "grid_ball");
-
-                // رسم نشانگر محموله مهمات روی گوی (Supply Drop Badge)
-                if (b->hasContainedSkill()) {
-                    QString icon = (b->getContainedSkill() == BallType::Bomb) ? "💣" :
-                                   ((b->getContainedSkill() == BallType::Laser) ? "⚡" : "🌈");
-                    auto* txt = addText(icon, QFont("Segoe UI Emoji", 10, QFont::Bold));
-                    txt->setDefaultTextColor(Qt::white);
-                    txt->setPos(drawX + 11, drawY + 8);
-                    txt->setZValue(2);
-                    txt->setData(0, "grid_ball");
-                }
             }
+        }
+    }
+}
+
+void GameScene::checkFloatingBalls() {
+    auto floating = m_grid.findFloatingBalls();
+    if (!floating.empty()) {
+        int dropScore = 0;
+        int floatCount = floating.size();
+
+        for (const auto& p : floating) {
+            QPointF pCenter = QPointF(PLAYFIELD_X, 0) + m_grid.getCenterPos(p.first, p.second);
+            spawnPopParticles(pCenter, QColor(148, 163, 184), 16);
+
+            Ball* b = m_grid.getBall(p.first, p.second);
+            if (b && b->hasContainedSkill()) {
+                addSkillAmmo(b->getContainedSkill());
+            }
+
+            m_grid.removeBall(p.first, p.second);
+            int pts = static_cast<int>(50 * m_scoreMultiplier);
+            m_score += pts;
+            dropScore += pts;
+        }
+
+        addTimeBonus(3.0, "FALL BONUS!");
+        spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 300),
+                          QString("+%1 FALL BONUS!").arg(dropScore), QColor(16, 185, 129));
+
+        if (floatCount >= 5) {
+            grantRandomSupplyDrop();
+            spawnFloatingText(QPointF(PLAYFIELD_X + PLAYFIELD_W / 2.0, 260),
+                              "★ SUPPLY AIRDROP REWARDED! ★", QColor(255, 204, 0));
         }
     }
 }
@@ -1002,8 +1164,9 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     painter->setFont(QFont("Segoe UI", 11, QFont::Black));
     painter->drawText(QRectF(20, 38, 110, 20), m_username);
 
-    QString modeTitle = m_isEndless ? QString("WAVE 0%1 [ENDLESS]").arg(m_currentWave) : QString("MODE: %1").arg(m_mode.toUpper());
-    painter->setPen(m_isEndless ? QColor(255, 204, 0) : ThemeManager::instance().getPrimaryColor());
+    QString diffTag = (m_difficulty == 0) ? "CADET" : ((m_difficulty == 2) ? "CYBER-GOD" : "VETERAN");
+    QString modeTitle = m_isEndless ? QString("WAVE 0%1 [%2]").arg(m_currentWave).arg(diffTag) : QString("MODE: %1").arg(m_mode.toUpper());
+    painter->setPen(m_isEndless ? (m_difficulty == 2 ? QColor(255, 51, 102) : QColor(255, 204, 0)) : ThemeManager::instance().getPrimaryColor());
     painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
     painter->drawText(QRectF(20, 58, 120, 16), modeTitle);
 
@@ -1058,7 +1221,7 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     if (m_isEndless) {
         painter->setPen(QColor(148, 163, 184));
         painter->setFont(QFont("Segoe UI", 7, QFont::Bold));
-        painter->drawText(QRectF(22, 162, 170, 14), QString("MISS TOLERANCE: %1/%2").arg(m_missedShotsCount).arg(m_maxMissedShots));
+        painter->drawText(QRectF(22, 162, 170, 14), QString("MISS: %1/%2 | MULT: x%3").arg(m_missedShotsCount).arg(m_maxMissedShots).arg(m_scoreMultiplier, 0, 'f', 1));
 
         qreal totalBarW = 170.0;
         qreal singleBarW = (totalBarW - (m_maxMissedShots - 1) * 4.0) / m_maxMissedShots;
@@ -1153,7 +1316,16 @@ void GameScene::drawLeftHUD(QPainter* painter) {
     QString telemetry = QString("TRAJ: %1° | BNC: %2 | SECTOR: 01").arg(m_aimAngleTelemetry, 0, 'f', 1).arg(m_aimBouncesTelemetry);
     painter->drawText(QRectF(22, 305, 175, 18), telemetry);
 
-    if (m_dangerLevel > 0.7 && std::fmod(t * 3.0, 1.0) < 0.5) {
+    // هشدارهای سایبری و هشدارهای اضطراب شلیک
+    if (m_isEndless && m_difficulty == 2 && m_panicTimer >= 4.5 && std::fmod(t * 8.0, 1.0) < 0.5) {
+        painter->setPen(QColor(255, 51, 102));
+        painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⚠️ CANNON OVERHEATING! ⚠️");
+    } else if (m_emergencyPurgeReady && std::fmod(t * 4.0, 1.0) < 0.5) {
+        painter->setPen(QColor(239, 68, 68));
+        painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
+        painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "☣ PURGE READY (HIT TOP) ☣");
+    } else if (m_dangerLevel > 0.7 && std::fmod(t * 3.0, 1.0) < 0.5) {
         painter->setPen(QColor(239, 68, 68));
         painter->setFont(QFont("Segoe UI", 7.5, QFont::Bold));
         painter->drawText(QRectF(12, 375, 195, 18), Qt::AlignCenter, "⚠️ PERIMETER BREACH ⚠️");

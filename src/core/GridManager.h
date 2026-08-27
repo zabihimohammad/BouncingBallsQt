@@ -23,8 +23,8 @@ public:
     void initGrid();
     void clearGrid();
     void loadLevel(int levelNumber);
-    void generateRandomLevel();
-    void addRowFromTop(int wave = 1); // پشتیبانی از درجه سختی موج
+    void generateRandomLevel(int rows = 5, int colorCount = 5, int clusterChance = 50, bool seedHazards = false);
+    void addRowFromTop(int wave = 1, int colorCount = 5, int clusterChance = 50);
 
     bool isOccupied(int r, int c) const;
     Ball* getBall(int r, int c);

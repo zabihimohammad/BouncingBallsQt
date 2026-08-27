@@ -52,8 +52,9 @@ public:
     static constexpr qreal SCENE_H = 600.0;
     static constexpr qreal PLAYFIELD_X = 224.0;
     static constexpr qreal PLAYFIELD_W = 352.0;
+    static constexpr qreal OVERDRIVE_DURATION = 6.0;
 
-    explicit GameScene(const QString& username, const QString& mode = "Classic", int levelNumber = 1, QObject* parent = nullptr);
+    explicit GameScene(const QString& username, const QString& mode = "Classic", int levelNumber = 1, int difficulty = 1, QObject* parent = nullptr);
     ~GameScene() override;
 
     void pauseGame();
@@ -91,25 +92,21 @@ private:
     bool findBestSnapSlot(const QPointF& hitPos, int& outR, int& outC);
     void syncCannonColorsWithGrid();
 
-    // سیستم مسلح‌سازی مهارت‌ها
     void armSkill(int index);
     void disarmSkill();
-
-    // سیستم محموله‌ها و ارتقای مهمات
     void addSkillAmmo(BallType skillType, int amount = 1);
     void grantRandomSupplyDrop();
 
-    // موتور اختصاصی گیم‌مودها
     void advanceEndlessRow();
     void triggerWaveEscalation();
     void addTimeBonus(qreal seconds, const QString& reason);
+    void checkOverdriveTrigger(const QPointF& center);
+    void executeEmergencyPurge(const QPointF& center);
 
-    // پارتیکل و افکت‌ها
     void spawnPopParticles(const QPointF& pos, const QColor& color, int count = 25);
     void spawnFloatingText(const QPointF& pos, const QString& text, const QColor& color = QColor(0, 242, 254));
     void triggerLaserBeamEffect(int row);
 
-    // داشبورد
     void drawLeftHUD(QPainter* painter);
     void drawRightSkillPanel(QPainter* painter);
     void drawPlayfieldFrame(QPainter* painter);
@@ -117,6 +114,7 @@ private:
     QString m_username;
     QString m_mode;
     int m_levelNumber = 1;
+    int m_difficulty = 1;
     GridManager m_grid;
 
     CannonItem* m_cannon = nullptr;
@@ -142,14 +140,31 @@ private:
     bool m_isTimeAttack = false;
     qreal m_timeRemaining = 75.0;
 
+    // پارامترهای سطح سختی
     bool m_isEndless = false;
     int m_currentWave = 1;
     qreal m_waveTimer = 0.0;
-    qreal m_currentDropInterval = 14.0;
+    qreal m_currentDropInterval = 12.0;
     int m_missedShotsCount = 0;
-    int m_maxMissedShots = 4;
+    int m_maxMissedShots = 3;
+    int m_activeColorsCount = 5;
+    int m_clusterChance = 25;
+    int m_maxAimBounces = 1;
+    qreal m_baseScoreMultiplier = 1.0;
+    qreal m_scoreMultiplier = 1.0;
+    qreal m_multiplierDecayTimer = 0.0;
+    qreal m_panicTimer = 0.0;
     qreal m_endlessRowTimer = 0.0;
     bool m_dangerTelegraph = false;
+
+    bool m_isOverdrive = false;
+    qreal m_overdriveTimer = 0.0;
+
+    bool m_emergencyPurgeReady = false;
+    qreal m_purgeCooldown = 0.0;
+    qreal m_empEventTimer = 0.0;
+    bool m_empSurgeActive = false;
+    qreal m_empSurgeDuration = 0.0;
 
     qreal m_displayedScore = 0.0;
     qreal m_ecgPhase = 0.0;

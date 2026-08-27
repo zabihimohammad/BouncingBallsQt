@@ -32,6 +32,7 @@ set(SOURCES
     src/ui/AdvancedSettingsWidget.cpp
     src/ui/HelpWidget.cpp
     src/ui/LevelSelectWidget.cpp
+    src/ui/DifficultyDialog.cpp
 )
 
 set(HEADERS
@@ -57,6 +58,7 @@ set(HEADERS
     src/ui/HelpWidget.h
     src/ui/LevelSelectWidget.h
     src/ui/ThemeManager.h
+    src/ui/DifficultyDialog.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

@@ -120,21 +120,53 @@ void GridManager::loadLevel(int levelNumber) {
     }
 }
 
-void GridManager::generateRandomLevel() {
+void GridManager::generateRandomLevel(int rows, int colorCount, int clusterChance, bool seedHazards) {
     clearGrid();
-    for (int r = 0; r < 5; ++r) {
+    auto rng = QRandomGenerator::global();
+    bool hasLockedBall = false;
+
+    for (int r = 0; r < rows; ++r) {
         int cols = (r % 2 == 0) ? COLS_EVEN : COLS_ODD;
         for (int c = 0; c < cols; ++c) {
-            BallColor chosen = Ball::getRandomColor(5);
-            if (c > 0 && m_grid[r][c - 1] && QRandomGenerator::global()->bounded(100) < 65) {
+            BallColor chosen = Ball::getRandomColor(colorCount);
+            if (c > 0 && m_grid[r][c - 1] && rng->bounded(100) < clusterChance) {
                 chosen = m_grid[r][c - 1]->getPrimaryColor();
             }
-            m_grid[r][c] = new Ball(chosen, BallType::Regular, BallColor::None, r, c);
+
+            auto* newBall = new Ball(chosen, BallType::Regular, BallColor::None, r, c);
+
+            if (seedHazards && r >= 2) {
+                int hChance = rng->bounded(100);
+                if (hChance < 8) {
+                    newBall->setPrimaryColor(BallColor::Black);
+                } else if (hChance < 18) {
+                    newBall->setFreezeLevel(rng->bounded(2) + 1);
+                } else if (hChance < 26) {
+                    newBall->setLocked(true);
+                    hasLockedBall = true;
+                }
+            }
+
+            m_grid[r][c] = newBall;
+        }
+    }
+
+    if (hasLockedBall) {
+        int targetRow = rows - 1;
+        int targetCols = (targetRow % 2 == 0) ? COLS_EVEN : COLS_ODD;
+        int centerCol = targetCols / 2;
+
+        if (m_grid[targetRow][centerCol]) {
+            auto* keyBall = m_grid[targetRow][centerCol];
+            keyBall->setLocked(false);
+            keyBall->setFreezeLevel(0);
+            keyBall->setKey(true);
+            keyBall->setPrimaryColor(BallColor::Yellow);
         }
     }
 }
 
-void GridManager::addRowFromTop(int wave) {
+void GridManager::addRowFromTop(int wave, int colorCount, int clusterChance) {
     int lastRow = ROWS - 1;
     for (size_t c = 0; c < m_grid[lastRow].size(); ++c) {
         if (m_grid[lastRow][c]) {
@@ -159,7 +191,6 @@ void GridManager::addRowFromTop(int wave) {
         }
     }
 
-    // تولید سطر جدید همراه با تزریق هوشمند موانع و جعبه مهمات
     auto rng = QRandomGenerator::global();
     bool hasLockedBallInRow = false;
 
@@ -167,32 +198,23 @@ void GridManager::addRowFromTop(int wave) {
         int chance = rng->bounded(100);
         Ball* newBall = nullptr;
 
-        // ۱. مانع سیاه نفوذناپذیر (از موج ۳ به بعد با شانس کم)
         if (wave >= 3 && chance < (3 + wave)) {
             newBall = new Ball(BallColor::Black, BallType::Regular, BallColor::None, 0, c);
-        }
-            // ۲. گوی‌های قفل‌شده (از موج ۲ به بعد)
-        else if (wave >= 2 && chance < (8 + wave * 2)) {
-            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c, true);
+        } else if (wave >= 2 && chance < (8 + wave * 2)) {
+            newBall = new Ball(Ball::getRandomColor(colorCount), BallType::Regular, BallColor::None, 0, c, true);
             hasLockedBallInRow = true;
-        }
-            // ۳. گوی‌های یخ‌زده ۲ لایه
-        else if (wave >= 2 && chance < (18 + wave * 3)) {
-            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
+        } else if (wave >= 2 && chance < (18 + wave * 3)) {
+            newBall = new Ball(Ball::getRandomColor(colorCount), BallType::Regular, BallColor::None, 0, c);
             newBall->setFreezeLevel(rng->bounded(2) + 1);
-        }
-            // ۴. محموله مهمات تاکتیکال (Supply Drop) - شانس ۱۲٪
-        else if (chance < 32) {
-            newBall = new Ball(Ball::getRandomColor(5), BallType::Regular, BallColor::None, 0, c);
+        } else if (chance < 32) {
+            newBall = new Ball(Ball::getRandomColor(colorCount), BallType::Regular, BallColor::None, 0, c);
             int skillR = rng->bounded(3);
             if (skillR == 0) newBall->setContainedSkill(BallType::Bomb);
             else if (skillR == 1) newBall->setContainedSkill(BallType::Laser);
             else newBall->setContainedSkill(BallType::Rainbow);
-        }
-            // ۵. گوی رنگی معمولی با چسبندگی خوشه‌ای
-        else {
-            BallColor col = Ball::getRandomColor(5);
-            if (c > 0 && m_grid[0][c - 1] && rng->bounded(100) < 60) {
+        } else {
+            BallColor col = Ball::getRandomColor(colorCount);
+            if (c > 0 && m_grid[0][c - 1] && rng->bounded(100) < clusterChance) {
                 col = m_grid[0][c - 1]->getPrimaryColor();
             }
             newBall = new Ball(col, BallType::Regular, BallColor::None, 0, c);
@@ -201,7 +223,6 @@ void GridManager::addRowFromTop(int wave) {
         m_grid[0][c] = newBall;
     }
 
-    // اگر در این سطر گوی قفل‌دار وجود داشت، حتماً یک گوی کلید در سطر قرار گیرد
     if (hasLockedBallInRow) {
         int keyCol = rng->bounded(COLS_EVEN);
         if (m_grid[0][keyCol] && !m_grid[0][keyCol]->isBlack()) {
